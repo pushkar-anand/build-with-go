@@ -1,81 +1,85 @@
 package config
 
 import (
-	"os"
-	"testing"
-
+	"fmt"
 	"github.com/stretchr/testify/require"
+	"os"
+	"strconv"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 type (
 	Server struct {
-		Host string `env:"SERVER.HOST"`
-		Port int    `env:"SERVER.PORT"`
+		Host string `env:"host"`
+		Port int    `env:"port"`
 	}
 
 	Config struct {
-		Server Server
+		Server Server `env:"server"`
 	}
 )
 
-func TestReadFromEnv(t *testing.T) {
-	t.Run("read from OS env", func(t *testing.T) {
-		err := os.Setenv("SERVER_HOST", "0.0.0.0")
-		assert.NoError(t, err)
+func TestReadFromEnv_readFromOSEnv(t *testing.T) {
+	host := "0.0.0.0"
+	port := 8080
 
-		err = os.Setenv("SERVER_PORT", "8080")
-		assert.NoError(t, err)
+	t.Setenv("SERVER_HOST", host)
+	t.Setenv("SERVER_PORT", strconv.Itoa(port))
 
-		cfg, err := ReadFromEnv[Config](".env", "")
-		assert.NoError(t, err)
+	cfg, err := ReadFromEnv[Config](".env", "")
+	require.NoError(t, err)
 
-		assert.Equal(t, "0.0.0.0", cfg.Server.Host)
-		assert.Equal(t, 8080, cfg.Server.Port)
-	})
-
-	t.Run("read from env file", func(t *testing.T) {
-		fileName := ".env"
-
-		err := createEnvFileForTest(t, fileName)
-		require.NoError(t, err)
-
-		cfg, err := ReadFromEnv[Config](fileName, "")
-		assert.NoError(t, err)
-
-		assert.Equal(t, "localhost", cfg.Server.Host)
-		assert.Equal(t, 8080, cfg.Server.Port)
-	})
-
-	t.Run("read from .env file with override from OS", func(t *testing.T) {
-		fileName := ".test.env"
-
-		err := createEnvFileForTest(t, fileName)
-		require.NoError(t, err)
-
-		err = os.Setenv("SERVER_HOST", "0.0.0.0")
-		assert.NoError(t, err)
-
-		cfg, err := ReadFromEnv[Config](fileName, "")
-		assert.NoError(t, err)
-
-		assert.Equal(t, "0.0.0.0", cfg.Server.Host)
-		assert.Equal(t, 8080, cfg.Server.Port)
-	})
+	assert.Equal(t, host, cfg.Server.Host)
+	assert.Equal(t, port, cfg.Server.Port)
 }
 
-func createEnvFileForTest(t *testing.T, fileName string) error {
+func TestReadFromEnv_readFromDotEnvFile(t *testing.T) {
+	host := "localhost"
+	port := 8080
+	fileName := ".test.env"
+	vars := fmt.Sprintf("SERVER_HOST=%s\nSERVER_PORT=%d", host, port)
+
+	err := createEnvFileForTest(t, fileName, vars)
+	require.NoError(t, err)
+
+	cfg, err := ReadFromEnv[Config](fileName, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, host, cfg.Server.Host)
+	assert.Equal(t, port, cfg.Server.Port)
+}
+
+func TestReadFromEnv_readFromFileOverrideOS(t *testing.T) {
+	host := "0.0.0.0"
+	port := 8080
+	fileName := ".test.env"
+
+	err := createEnvFileForTest(t, fileName, "SERVER_HOST=localhost\n")
+	require.NoError(t, err)
+
+	t.Setenv("SERVER_HOST", host)
+	t.Setenv("SERVER_PORT", strconv.Itoa(port))
+
+	cfg, err := ReadFromEnv[Config](fileName, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, host, cfg.Server.Host)
+	assert.Equal(t, 8080, cfg.Server.Port)
+}
+
+func createEnvFileForTest(t *testing.T, fileName string, data string) error {
 	t.Helper()
 
-	err := os.WriteFile(fileName, []byte("SERVER_HOST=localhost\nSERVER_PORT=8080\n"), 0644)
+	err := os.WriteFile(fileName, []byte(data), 0644)
 	if err != nil {
 		return err
 	}
 
-	//t.Cleanup(func() {
-	//	_ = os.Remove(fileName)
-	//})
+	t.Cleanup(func() {
+		_ = os.Remove(fileName)
+	})
 
 	return nil
 }
