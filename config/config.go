@@ -1,9 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"strings"
 
@@ -21,17 +23,28 @@ var (
 	k = koanf.New(".") // global koanf instance
 )
 
-var envKeyModifier = func(s string) string {
-	return strings.ToUpper(s)
+var envKeyModifier = func(prefix string) func(string) string {
+	return func(s string) string {
+		return strings.Replace(
+			strings.ToLower(
+				strings.TrimPrefix(s, prefix),
+			), "_", ".", -1,
+		)
+	}
 }
 
+const delim = "."
+
 func ReadFromEnv[T any](envFile string, prefix string) (*T, error) {
-	err := k.Load(file.Provider(envFile), dotenv.ParserEnv(prefix, ".", envKeyModifier))
+	envFileParser := dotenv.ParserEnv(prefix, delim, envKeyModifier(prefix))
+	osEnvProvider := env.Provider(prefix, delim, envKeyModifier(prefix))
+
+	err := k.Load(file.Provider(envFile), envFileParser)
 	if err != nil && !fileNotExistsErr(err) {
 		return nil, fmt.Errorf("error loading config from %s: %w", envFile, err)
 	}
 
-	err = k.Load(env.Provider(prefix, ".", envKeyModifier), nil)
+	err = k.Load(osEnvProvider, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error loading config from %s: %w", envFile, err)
 	}
@@ -60,4 +73,10 @@ func unmarshalConfig[T any](k *koanf.Koanf) (*T, error) {
 
 func fileNotExistsErr(err error) bool {
 	return errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist)
+}
+
+func easyPrint(data interface{}) {
+	manifestJson, _ := json.MarshalIndent(data, "", "  ")
+
+	log.Println(string(manifestJson))
 }
