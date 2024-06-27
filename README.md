@@ -1,3 +1,3 @@
-## go-libraries
+## build-with-go
 
-The repository contains collection of libraries I often use in my go projects
+The repository contains a collection of libraries + boilerplate code I often use in my go projects

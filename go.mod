@@ -1,4 +1,4 @@
-module github.com/pushkar-anand/go-libraries
+module github.com/pushkar-anand/build-with-go
 
 go 1.22
 
