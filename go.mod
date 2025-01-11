@@ -1,6 +1,6 @@
 module github.com/pushkar-anand/build-with-go
 
-go 1.22
+go 1.23
 
 require (
 	github.com/knadh/koanf/parsers/dotenv v1.0.0
