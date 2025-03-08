@@ -26,3 +26,9 @@ func WithCustomMessage(tag string, messageFn MessageFunc) Option {
 		s.messages[tag] = messageFn
 	})
 }
+
+func WithCustomMessages(messages map[string]MessageFunc) Option {
+	return optionFunc(func(s *Validator) {
+		maps.Insert(s.messages, maps.All(messages))
+	})
+}

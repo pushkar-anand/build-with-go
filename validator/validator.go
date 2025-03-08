@@ -109,9 +109,9 @@ func (v *Validator) parseError(err error) (*Result, error) {
 	switch {
 	case err == nil:
 		return &Result{Valid: true}, nil
-	case errors.As(err, &invalidErr), errors.Is(err, invalidErr):
+	case errors.As(err, &invalidErr):
 		return nil, fmt.Errorf("validation failed: %w", invalidErr)
-	case errors.Is(err, &validationErrs):
+	case errors.As(err, &validationErrs):
 		failures := make(map[string]Reason)
 
 		for _, validationErr := range validationErrs {
@@ -129,20 +129,4 @@ func (v *Validator) parseError(err error) (*Result, error) {
 	default:
 		return nil, fmt.Errorf("validation failed with unexpected error: %w", err)
 	}
-}
-
-// createUserFriendlyMessage uses the custom message functions to generate error messages
-func (v *Validator) createUserFriendlyMessage(field, tag string, err validator.FieldError) string {
-	// Look for a custom message function for this tag
-	if messageFn, exists := v.messages[tag]; exists {
-		return messageFn(field, err.Param())
-	}
-
-	// Fall back to a default message if available
-	if defaultFn, exists := v.messages["default"]; exists {
-		return defaultFn(field, tag)
-	}
-
-	// Last resort fallback
-	return fmt.Sprintf("%s failed validation for rule: %s", field, tag)
 }
