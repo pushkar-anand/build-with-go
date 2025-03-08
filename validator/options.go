@@ -19,3 +19,10 @@ func WithCustomTags(rules map[string]ValidationFunc) Option {
 		maps.Insert(s.rules, maps.All(rules))
 	})
 }
+
+// WithCustomMessage allows setting a single custom error message for a specific validation tag
+func WithCustomMessage(tag string, messageFn MessageFunc) Option {
+	return optionFunc(func(s *Validator) {
+		s.messages[tag] = messageFn
+	})
+}

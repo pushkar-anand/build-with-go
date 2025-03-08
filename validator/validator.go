@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-playground/validator/v10"
+	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 type (
 	Validator struct {
 		rules     map[string]ValidationFunc
+		messages  map[string]MessageFunc
 		validator *validator.Validate
 	}
 
@@ -44,6 +46,7 @@ func New(opts ...Option) (*Validator, error) {
 		vl := &Validator{
 			validator: v,
 			rules:     make(map[string]ValidationFunc),
+			messages:  maps.Clone(DefaultMessageMap),
 		}
 
 		for _, opt := range opts {
@@ -91,13 +94,13 @@ func buildValidator() *validator.Validate {
 func (v *Validator) ValidateStruct(ctx context.Context, s any) (*Result, error) {
 	err := v.validator.StructCtx(ctx, s)
 	if err != nil {
-		return parseError(err)
+		return v.parseError(err)
 	}
 
 	return &Result{Valid: true}, nil
 }
 
-func parseError(err error) (*Result, error) {
+func (v *Validator) parseError(err error) (*Result, error) {
 	var (
 		invalidErr     *validator.InvalidValidationError
 		validationErrs validator.ValidationErrors
@@ -118,7 +121,7 @@ func parseError(err error) (*Result, error) {
 			failures[field] = Reason{
 				Value:   validationErr.Value(),
 				Rule:    tag,
-				Message: createUserFriendlyMessage(field, tag, validationErr),
+				Message: v.createUserFriendlyMessage(field, tag, validationErr),
 			}
 		}
 
@@ -128,21 +131,18 @@ func parseError(err error) (*Result, error) {
 	}
 }
 
-// Helper function to create user-friendly error messages
-func createUserFriendlyMessage(field, tag string, err validator.FieldError) string {
-	switch tag {
-	case "required":
-		return fmt.Sprintf("%s is required", field)
-	case "email":
-		return fmt.Sprintf("%s must be a valid email address", field)
-	case "min":
-		return fmt.Sprintf("%s must be at least %s", field, err.Param())
-	case "max":
-		return fmt.Sprintf("%s must not exceed %s", field, err.Param())
-	case "len":
-		return fmt.Sprintf("%s must be exactly %s characters long", field, err.Param())
-	// Add more cases for other validation tags
-	default:
-		return fmt.Sprintf("%s failed validation for rule: %s", field, tag)
+// createUserFriendlyMessage uses the custom message functions to generate error messages
+func (v *Validator) createUserFriendlyMessage(field, tag string, err validator.FieldError) string {
+	// Look for a custom message function for this tag
+	if messageFn, exists := v.messages[tag]; exists {
+		return messageFn(field, err.Param())
 	}
+
+	// Fall back to a default message if available
+	if defaultFn, exists := v.messages["default"]; exists {
+		return defaultFn(field, tag)
+	}
+
+	// Last resort fallback
+	return fmt.Sprintf("%s failed validation for rule: %s", field, tag)
 }
