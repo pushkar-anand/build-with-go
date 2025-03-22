@@ -32,8 +32,12 @@ func NewJSONWriter(
 	return jw
 }
 
-func (h *JSONWriter) Write(ctx context.Context, w http.ResponseWriter, v any) {
+func (h *JSONWriter) Ok(ctx context.Context, w http.ResponseWriter, v any) {
 	h.writeJSON(ctx, w, http.StatusOK, v)
+}
+
+func (h *JSONWriter) Write(ctx context.Context, w http.ResponseWriter, statusCode int, v any) {
+	h.writeJSON(ctx, w, statusCode, v)
 }
 
 func (h *JSONWriter) WriteError(ctx context.Context, r *http.Request, w http.ResponseWriter, err error) {
