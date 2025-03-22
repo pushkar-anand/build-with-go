@@ -1,6 +1,6 @@
 module github.com/pushkar-anand/build-with-go
 
-go 1.23
+go 1.24
 
 require (
 	github.com/go-playground/validator/v10 v10.24.0
