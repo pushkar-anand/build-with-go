@@ -93,12 +93,12 @@ func (h *JSONWriter) getMappedProblem(err error) Problem {
 
 	if h.errProblemMapper == nil {
 		h.logger.ErrorContext(context.Background(), "failed to handle request", logger.Error(err))
-		return &defaultProblem{}
+		return defaultProblem
 	}
 
 	p := h.errProblemMapper(err)
 	if p == nil {
-		return &defaultProblem{}
+		return defaultProblem
 	}
 
 	return p
