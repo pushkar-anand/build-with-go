@@ -47,6 +47,11 @@ func (h *JSONWriter) WriteError(ctx context.Context, r *http.Request, w http.Res
 	h.writeJSON(ctx, w, problem.Status(), body)
 }
 
+func (h *JSONWriter) WriteProblem(ctx context.Context, r *http.Request, w http.ResponseWriter, p Problem) {
+	body := buildProblemJSON(r, p)
+	h.writeJSON(ctx, w, p.Status(), body)
+}
+
 func (h *JSONWriter) writeJSON(
 	ctx context.Context,
 	w http.ResponseWriter,
