@@ -1,21 +1,25 @@
 package request
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/pushkar-anand/build-with-go/logger"
-	"github.com/pushkar-anand/build-with-go/validator"
-
+	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 	"io"
 	"log/slog"
 	"net/http"
 )
 
 type (
+	validator interface {
+		ValidateStruct(context.Context, any) (*validatorpkg.Result, error)
+	}
+
 	// Reader provides functionality to read and validate HTTP request data
 	// It contains a logger for error reporting and a validator for request validation
 	Reader struct {
 		logger    *slog.Logger
-		validator *validator.Validator
+		validator validator
 	}
 
 	// TypedReader is a generic wrapper around Reader that provides type-safe request parsing
@@ -28,7 +32,7 @@ type (
 // NewReader creates a new Reader instance with the provided logger and validator
 func NewReader(
 	l *slog.Logger,
-	v *validator.Validator,
+	v validator,
 ) *Reader {
 	return &Reader{
 		logger:    l,

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pushkar-anand/build-with-go/validator"
+	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 	"io"
 	"net/http"
 	"strings"
@@ -23,7 +23,7 @@ type (
 	// It is used when request data fails validation checks
 	ValidationError struct {
 		ReadError
-		Result *validator.Result
+		Result *validatorpkg.Result
 	}
 )
 
@@ -52,10 +52,16 @@ func parseReadError(err error) *ReadError {
 	// io.ErrUnexpectedEOF error for syntax errors in the JSON. There
 	// is an open issue regarding this at
 	// https://github.com/golang/go/issues/25956.
-	case errors.As(err, &syntaxError), errors.Is(err, io.ErrUnexpectedEOF):
+	case errors.As(err, &syntaxError):
 		return &ReadError{
 			HTTPStatusCode: http.StatusBadRequest,
 			Message:        fmt.Sprintf("Request body contains badly-formed JSON at offset %d", syntaxError.Offset),
+			UnderlyingErr:  err,
+		}
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return &ReadError{
+			HTTPStatusCode: http.StatusBadRequest,
+			Message:        fmt.Sprintf("Request body contains badly-formed JSON"),
 			UnderlyingErr:  err,
 		}
 
