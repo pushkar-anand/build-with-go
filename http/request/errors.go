@@ -33,8 +33,34 @@ func (e *ReadError) Error() string { return e.Message }
 // Unwrap returns the underlying error for ReadError
 func (e *ReadError) Unwrap() error { return e.UnderlyingErr }
 
+func (e *ReadError) Type() string {
+	return "about:blank"
+}
+
+func (e *ReadError) Title() string {
+	return http.StatusText(e.HTTPStatusCode)
+}
+
+func (e *ReadError) Status() int {
+	return e.HTTPStatusCode
+}
+
+func (e *ReadError) Detail() string {
+	return e.Message
+}
+
+func (e *ReadError) CustomMembers() map[string]any {
+	return nil
+}
+
 // Error returns the error message for ValidationError
 func (e *ValidationError) Error() string { return e.Message }
+
+func (e *ValidationError) CustomMembers() map[string]any {
+	return map[string]any{
+		"context": e.Result,
+	}
+}
 
 // parseReadError analyzes JSON parsing errors and returns appropriate ReadError
 // with user-friendly messages and suitable HTTP status codes
