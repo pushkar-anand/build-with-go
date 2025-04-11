@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/go-playground/validator/v10 v10.25.0
+	github.com/gorilla/schema v1.4.1
 	github.com/knadh/koanf/parsers/dotenv v1.0.0
 	github.com/knadh/koanf/providers/env v1.0.0
 	github.com/knadh/koanf/providers/file v1.1.2
