@@ -77,6 +77,31 @@ func (h *JSONWriter) writeJSON(
 	}
 }
 
+// HandlerFunc is a custom handler function type that returns an error
+type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
+
+// HandlerWithContextFunc is a custom handler function type with context that returns an error
+type HandlerWithContextFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request) error
+
+// ToStandardHandler converts a HandlerFunc to a standard http.HandlerFunc with centralized error handling
+func (h *JSONWriter) ToStandardHandler(handler HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := handler(w, r); err != nil {
+			h.WriteError(r.Context(), r, w, err)
+		}
+	}
+}
+
+// ToStandardHandlerWithContext converts a HandlerWithContextFunc to a standard http.HandlerFunc with context support
+func (h *JSONWriter) ToStandardHandlerWithContext(handler HandlerWithContextFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if err := handler(ctx, w, r); err != nil {
+			h.WriteError(ctx, r, w, err)
+		}
+	}
+}
+
 func (h *JSONWriter) getMappedProblem(err error) Problem {
 	var (
 		readErr       *request.ReadError
