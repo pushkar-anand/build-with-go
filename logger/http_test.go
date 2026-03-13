@@ -207,4 +207,40 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, float64(http.StatusOK), logEntry["status"])
 		assert.Equal(t, float64(0), logEntry["bytes"])
 	})
+
+	t.Run("supports ResponseController and SSE streaming", func(t *testing.T) {
+		var buf bytes.Buffer
+		h := slog.NewJSONHandler(&buf, nil)
+		log := slog.New(h)
+
+		middleware := NewHTTPLogger(log)
+
+		handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+
+			rc := http.NewResponseController(w)
+			w.Write([]byte("data: test\n\n"))
+
+			err := rc.Flush()
+			assert.NoError(t, err)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/stream", nil)
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "data: test\n\n", rr.Body.String())
+
+		var logEntry map[string]interface{}
+		err := json.Unmarshal(buf.Bytes(), &logEntry)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "INFO", logEntry["level"])
+		assert.Equal(t, float64(http.StatusOK), logEntry["status"])
+		// The 12 bytes written
+		assert.Equal(t, float64(12), logEntry["bytes"])
+	})
 }
