@@ -29,6 +29,10 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 type httpLogger struct {
 	log  *slog.Logger
 	next http.Handler
