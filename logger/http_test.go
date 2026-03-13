@@ -131,6 +131,58 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, float64(18), logEntry["bytes"])
 	})
 
+	t.Run("uses X-Forwarded-For if available", func(t *testing.T) {
+		var buf bytes.Buffer
+		h := slog.NewJSONHandler(&buf, nil)
+		log := slog.New(h)
+
+		middleware := NewHTTPLogger(log)
+
+		handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/proxy", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		req.Header.Set("X-Forwarded-For", "203.0.113.195, 198.51.100.1")
+
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		var logEntry map[string]interface{}
+		err := json.Unmarshal(buf.Bytes(), &logEntry)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "203.0.113.195", logEntry["remote_ip"])
+	})
+
+	t.Run("uses X-Real-IP if available", func(t *testing.T) {
+		var buf bytes.Buffer
+		h := slog.NewJSONHandler(&buf, nil)
+		log := slog.New(h)
+
+		middleware := NewHTTPLogger(log)
+
+		handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/proxy", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		req.Header.Set("X-Real-IP", "203.0.113.195")
+
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		var logEntry map[string]interface{}
+		err := json.Unmarshal(buf.Bytes(), &logEntry)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "203.0.113.195", logEntry["remote_ip"])
+	})
+
 	t.Run("defaults to 200 OK if neither WriteHeader nor Write is called", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := slog.NewJSONHandler(&buf, nil)
