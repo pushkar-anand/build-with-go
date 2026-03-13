@@ -112,7 +112,7 @@ func (v *Validator) parseError(err error) (*Result, error) {
 	case errors.As(err, &invalidErr):
 		return nil, fmt.Errorf("validation failed: %w", invalidErr)
 	case errors.As(err, &validationErrs):
-		failures := make(map[string]Reason)
+		failures := make(map[string]Reason, len(validationErrs))
 
 		for _, validationErr := range validationErrs {
 			field := validationErr.Field()
