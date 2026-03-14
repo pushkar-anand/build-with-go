@@ -35,5 +35,5 @@ func New(options ...Option) *slog.Logger {
 		h = slog.NewJSONHandler(c.writer, opts)
 	}
 
-	return slog.New(h)
+	return slog.New(&contextHandler{h})
 }
