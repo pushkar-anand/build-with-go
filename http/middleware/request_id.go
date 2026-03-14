@@ -1,23 +1,15 @@
 package middleware
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/pushkar-anand/build-with-go/logger"
 )
 
-// generateID generates a random 16-byte hex string.
+// generateID generates a random UUID v4 string.
 func generateID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// In the extremely rare case that rand.Read fails,
-		// panic to ensure we don't proceed with an all-zero ID.
-		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
-	}
-	return hex.EncodeToString(b)
+	return uuid.New().String()
 }
 
 // RequestID is a middleware that injects a request ID into the context of each request.
