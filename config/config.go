@@ -1,11 +1,9 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
 	"strings"
 
@@ -75,8 +73,3 @@ func fileNotExistsErr(err error) bool {
 	return errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist)
 }
 
-func easyPrint(data interface{}) {
-	manifestJson, _ := json.MarshalIndent(data, "", "  ")
-
-	log.Println(string(manifestJson))
-}
