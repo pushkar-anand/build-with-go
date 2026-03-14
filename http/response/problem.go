@@ -109,7 +109,8 @@ func (cp *customProblem) CustomMembers() map[string]any {
 }
 
 func buildProblemJSON(r *http.Request, p Problem) map[string]any {
-	m := make(map[string]any)
+	capacity := 4 + len(p.CustomMembers())
+	m := make(map[string]any, capacity)
 
 	m["title"] = p.Title()
 	m["status"] = p.Status()
