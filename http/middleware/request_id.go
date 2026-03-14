@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/pushkar-anand/build-with-go/logger"
+	"github.com/pushkar-anand/build-with-go/ctxval"
 )
 
 // generateID generates a random UUID v4 string.
@@ -21,7 +21,7 @@ func RequestID(next http.Handler) http.Handler {
 			reqID = generateID()
 		}
 
-		ctx := logger.WithRequestID(r.Context(), reqID)
+		ctx := ctxval.WithRequestID(r.Context(), reqID)
 		w.Header().Set("X-Request-Id", reqID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))

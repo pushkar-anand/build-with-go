@@ -5,12 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pushkar-anand/build-with-go/logger"
+	"github.com/pushkar-anand/build-with-go/ctxval"
 )
 
 func TestRequestID(t *testing.T) {
 	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqID, ok := logger.RequestIDFromContext(r.Context())
+		reqID, ok := ctxval.RequestIDFromContext(r.Context())
 		if !ok {
 			t.Error("expected request ID in context")
 		}
@@ -40,7 +40,7 @@ func TestRequestID(t *testing.T) {
 func TestRequestID_ExistingHeader(t *testing.T) {
 	existingID := "existing-req-id"
 	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqID, ok := logger.RequestIDFromContext(r.Context())
+		reqID, ok := ctxval.RequestIDFromContext(r.Context())
 		if !ok {
 			t.Error("expected request ID in context")
 		}
