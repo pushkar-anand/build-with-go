@@ -199,7 +199,7 @@ func (r *Reader) validate(ctx context.Context, v any) error {
 
 	problems, err := r.validator.ValidateRequest(ctx, v)
 	if err != nil {
-		r.logger.ErrorContext(ctx, "failed to validate body", logger.Error(err))
+		r.logger.ErrorContext(ctx, "failed to validate body", logger.Err(err))
 
 		return &ReadError{
 			HTTPStatusCode: http.StatusInternalServerError,

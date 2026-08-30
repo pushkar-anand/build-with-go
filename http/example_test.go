@@ -30,7 +30,7 @@ func Example() {
 
 	v, err := validator.New()
 	if err != nil {
-		log.Error("building validator", logger.Error(err))
+		log.Error("building validator", logger.Err(err))
 		return
 	}
 
@@ -56,7 +56,7 @@ func Example() {
 
 	srv := server.New(handler, server.WithHostPort("127.0.0.1", 0), server.WithLogger(log))
 	if err := srv.Listen(); err != nil {
-		log.Error("listening", logger.Error(err))
+		log.Error("listening", logger.Err(err))
 		return
 	}
 
@@ -71,7 +71,7 @@ func Example() {
 	stop()
 
 	if err := <-stopped; err != nil {
-		log.Error("serving", logger.Error(err))
+		log.Error("serving", logger.Err(err))
 	}
 
 	// Output:
