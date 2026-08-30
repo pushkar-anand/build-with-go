@@ -116,7 +116,7 @@ func TestJSONWriter_WriteError(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/orders", nil)
 
 			NewJSONWriter(slog.New(slog.DiscardHandler), tt.opts...).
-				WriteError(context.Background(), r, w, tt.err)
+				WriteError(w, r, tt.err)
 
 			assert.Equal(t, tt.wantStatus, w.Code)
 			assert.Equal(t, "application/problem+json; charset=utf-8", w.Header().Get("Content-Type"))
@@ -144,14 +144,15 @@ func TestJSONWriter_NilSlicesAndMapsEncodeAsEmpty(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/posts", nil)
 
 	NewJSONWriter(slog.New(slog.DiscardHandler)).
-		Ok(context.Background(), w, payload{})
+		Ok(w, r, payload{})
 
 	assert.JSONEq(t, `{"posts":[],"meta":{}}`, w.Body.String())
 }
 
-func TestJSONWriter_ToStandardHandler(t *testing.T) {
+func TestJSONWriter_Handle(t *testing.T) {
 	t.Parallel()
 
 	writer := NewJSONWriter(slog.New(slog.DiscardHandler))
@@ -162,7 +163,7 @@ func TestJSONWriter_ToStandardHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
 
-		writer.ToStandardHandler(func(w http.ResponseWriter, _ *http.Request) error {
+		writer.Handle(func(w http.ResponseWriter, _ *http.Request) error {
 			w.WriteHeader(http.StatusCreated)
 			return nil
 		})(w, r)
@@ -177,7 +178,7 @@ func TestJSONWriter_ToStandardHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
 
-		writer.ToStandardHandler(func(http.ResponseWriter, *http.Request) error {
+		writer.Handle(func(http.ResponseWriter, *http.Request) error {
 			return &domainProblem{status: http.StatusConflict, detail: "item is out of stock"}
 		})(w, r)
 
@@ -201,7 +202,7 @@ func TestJSONWriter_ToStandardHandler(t *testing.T) {
 
 		var seen any
 
-		writer.ToStandardHandler(func(_ http.ResponseWriter, r *http.Request) error {
+		writer.Handle(func(_ http.ResponseWriter, r *http.Request) error {
 			seen = r.Context().Value(key{})
 			return nil
 		})(w, r)

@@ -32,24 +32,30 @@ func NewJSONWriter(
 	return jw
 }
 
-func (h *JSONWriter) Ok(ctx context.Context, w http.ResponseWriter, v any) {
-	h.writeJSON(ctx, w, http.StatusOK, v)
+// Ok writes v as a 200 response.
+func (h *JSONWriter) Ok(w http.ResponseWriter, r *http.Request, v any) {
+	h.writeJSON(r.Context(), w, http.StatusOK, v)
 }
 
-func (h *JSONWriter) Write(ctx context.Context, w http.ResponseWriter, statusCode int, v any) {
-	h.writeJSON(ctx, w, statusCode, v)
+// Write writes v with the given status code.
+func (h *JSONWriter) Write(w http.ResponseWriter, r *http.Request, statusCode int, v any) {
+	h.writeJSON(r.Context(), w, statusCode, v)
 }
 
-func (h *JSONWriter) WriteError(ctx context.Context, r *http.Request, w http.ResponseWriter, err error) {
+// WriteError resolves err to a Problem and writes it as a problem document.
+func (h *JSONWriter) WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	ctx := r.Context()
+
 	problem := h.getMappedProblem(ctx, err)
 	body := buildProblemJSON(r, problem)
 
 	h.writeJSON(ctx, w, problem.Status(), body)
 }
 
-func (h *JSONWriter) WriteProblem(ctx context.Context, r *http.Request, w http.ResponseWriter, p Problem) {
+// WriteProblem writes p as a problem document.
+func (h *JSONWriter) WriteProblem(w http.ResponseWriter, r *http.Request, p Problem) {
 	body := buildProblemJSON(r, p)
-	h.writeJSON(ctx, w, p.Status(), body)
+	h.writeJSON(r.Context(), w, p.Status(), body)
 }
 
 func (h *JSONWriter) writeJSON(
@@ -85,11 +91,12 @@ func (h *JSONWriter) writeJSON(
 // passes r to — a Reader, say — to observe it.
 type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 
-// ToStandardHandler converts a HandlerFunc to a standard http.HandlerFunc with centralized error handling
-func (h *JSONWriter) ToStandardHandler(handler HandlerFunc) http.HandlerFunc {
+// Handle converts a HandlerFunc to a standard http.HandlerFunc, turning a
+// returned error into a problem document.
+func (h *JSONWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := handler(w, r); err != nil {
-			h.WriteError(r.Context(), r, w, err)
+			h.WriteError(w, r, err)
 		}
 	}
 }
