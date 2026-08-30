@@ -57,10 +57,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		<-ctx.Done()
 
@@ -75,7 +72,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		if err != nil {
 			s.log.ErrorContext(shutdownCtx, "failed to shutdown server", logger.Error(err))
 		}
-	}()
+	})
 
 	err := s.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
