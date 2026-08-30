@@ -126,7 +126,17 @@ func ExampleWithRejectUnknownFields() {
 
 	_, err := newReader(request.WithRejectUnknownFields()).ReadAndValidateJSON[createPost](r)
 
-	fmt.Println(err)
+	// The two audiences differ: Error is written for a log, Detail for the
+	// client that sent the request.
+	var readErr *request.ReadError
+	if errors.As(err, &readErr) {
+		fmt.Println("error: ", readErr)
+		fmt.Println("detail:", readErr.Detail())
+		fmt.Println("status:", readErr.Status())
+	}
 
-	// Output: Request body contains unknown field "tpyo"
+	// Output:
+	// error:  request: request body contains unknown field "tpyo"
+	// detail: Request body contains unknown field "tpyo"
+	// status: 400
 }
