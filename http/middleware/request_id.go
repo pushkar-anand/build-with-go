@@ -2,14 +2,17 @@ package middleware
 
 import (
 	"net/http"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/pushkar-anand/build-with-go/ctxval"
 )
 
-// generateID generates a random UUID v4 string.
+// generateID generates a random UUID v7 string.
+//
+// V7 leads with a millisecond timestamp, so IDs sort chronologically. That is
+// worth having once request IDs reach log aggregation, or are stored as keys.
 func generateID() string {
-	return uuid.New().String()
+	return uuid.NewV7().String()
 }
 
 // RequestID is a middleware that injects a request ID into the context of each request.
