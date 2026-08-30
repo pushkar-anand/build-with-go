@@ -210,3 +210,30 @@ func TestJSONWriter_Handle(t *testing.T) {
 		assert.Equal(t, "carried", seen)
 	})
 }
+
+// json/v2 does not sort map keys on its own, and problem documents are built as
+// maps, so the writer asks for deterministic output. Without it the same error
+// serialises with a different key order each time.
+func TestJSONWriter_ProblemJSONIsByteStable(t *testing.T) {
+	t.Parallel()
+
+	err := &domainProblem{status: http.StatusConflict, detail: "item is out of stock"}
+
+	writer := NewJSONWriter(slog.New(slog.DiscardHandler))
+
+	first := ""
+
+	for i := range 20 {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/orders", nil)
+
+		writer.WriteError(w, r, err)
+
+		if i == 0 {
+			first = w.Body.String()
+			continue
+		}
+
+		require.Equal(t, first, w.Body.String(), "problem document key order must not vary")
+	}
+}

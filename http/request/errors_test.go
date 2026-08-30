@@ -115,3 +115,34 @@ func Test_parseReadError_BodyTooLarge(t *testing.T) {
 	assert.Equal(t, http.StatusRequestEntityTooLarge, readErr.HTTPStatusCode)
 	assert.Equal(t, "Request body must not be larger than 8 bytes", readErr.Message)
 }
+
+// The client-facing wording and the Go error string are different audiences:
+// Detail reads as a sentence, Error follows Go's lower-case, prefixed form.
+func TestReadError_ErrorStringFollowsGoConvention(t *testing.T) {
+	t.Parallel()
+
+	err := &ReadError{
+		HTTPStatusCode: http.StatusBadRequest,
+		Message:        "Request body must not be empty",
+	}
+
+	assert.Equal(t, "request: request body must not be empty", err.Error())
+	assert.Equal(t, "Request body must not be empty", err.Detail())
+}
+
+func TestValidationError_ErrorStringNamesTheFields(t *testing.T) {
+	t.Parallel()
+
+	err := &ValidationError{
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		Message:        "Request is not valid",
+		Problems: map[string]any{
+			"title": "required",
+			"body":  "required",
+		},
+	}
+
+	// Sorted, so a log line is stable regardless of map iteration order.
+	assert.Equal(t, "request: validation failed: body, title", err.Error())
+	assert.Equal(t, "Request is not valid", err.Detail())
+}

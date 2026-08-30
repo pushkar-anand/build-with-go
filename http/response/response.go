@@ -77,7 +77,10 @@ func (h *JSONWriter) writeJSON(
 		return
 	}
 
-	err := json.MarshalWrite(w, v)
+	// Deterministic sorts map keys. Problem documents are built as maps, and
+	// json/v2 does not order them otherwise, so without this the same error
+	// renders with a different key order each time.
+	err := json.MarshalWrite(w, v, json.Deterministic(true))
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Failed to encode response", logger.Error(err))
 	}

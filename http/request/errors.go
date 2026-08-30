@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
+	"unicode"
 )
 
 type (
@@ -28,30 +31,54 @@ type (
 	}
 )
 
-// Error returns the error message for ReadError
-func (e *ReadError) Error() string { return e.Message }
+// Error implements error.
+//
+// Message is worded for the client and so reads as a sentence; an error string
+// is read by a developer in a log, so this lowercases it and prefixes the
+// package, per Go convention. Detail carries the client-facing wording.
+func (e *ReadError) Error() string {
+	return "request: " + lowerFirst(e.Message)
+}
 
 // Unwrap returns the underlying error for ReadError
 func (e *ReadError) Unwrap() error { return e.UnderlyingErr }
 
+// Type implements response.Problem. Read failures have no type URI of their own.
 func (e *ReadError) Type() string {
 	return "about:blank"
 }
 
+// Title implements response.Problem, reporting the status code's standard text.
 func (e *ReadError) Title() string {
 	return http.StatusText(e.HTTPStatusCode)
 }
 
+// Status implements response.Problem, reporting the HTTP status code to send.
 func (e *ReadError) Status() int {
 	return e.HTTPStatusCode
 }
 
+// Detail implements response.Problem, returning the client-facing message.
 func (e *ReadError) Detail() string {
 	return e.Message
 }
 
+// CustomMembers implements response.Problem. A read failure adds no members.
 func (e *ReadError) CustomMembers() map[string]any {
 	return nil
+}
+
+// lowerFirst lowercases the first rune, turning a sentence written for a client
+// into the lower-case form Go expects of an error string.
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+
+	r := []rune(s)
+	r[0] = unicode.ToLower(r[0])
+
+	return string(r)
 }
 
 // newValidationError builds the error for a failed validation, or returns nil
@@ -68,9 +95,16 @@ func newValidationError(problems map[string]any) error {
 	}
 }
 
-// Error returns the error message for ValidationError
-func (e *ValidationError) Error() string { return e.Message }
+// Error implements error, naming the fields that failed so a log line says
+// which ones without having to render the whole problem document.
+func (e *ValidationError) Error() string {
+	fields := slices.Sorted(maps.Keys(e.Problems))
 
+	return "request: validation failed: " + strings.Join(fields, ", ")
+}
+
+// CustomMembers implements response.Problem, exposing the per-field failures
+// under the "context" member of the problem document.
 func (e *ValidationError) CustomMembers() map[string]any {
 	return map[string]any{
 		"context": e.Problems,
