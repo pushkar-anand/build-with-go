@@ -1,63 +1,117 @@
 package request
 
 import (
-	"encoding/json"
-	"github.com/stretchr/testify/assert"
+	json "encoding/json/v2"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func Test_parseReadError_JSONErrors(t *testing.T) {
-	type Dummy struct {
-		Name string `json:"name"`
-		Age  int    `json:"age"`
-	}
+type dummy struct {
+	Name string `json:"name"`
+	Age  int    `json:"age"`
+}
+
+func Test_parseReadError(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
-		name         string
-		jsonInput    string
-		expectedCode int
+		name        string
+		input       string
+		opts        []json.Options
+		wantStatus  int
+		wantMessage string
 	}{
 		{
-			name:         "Unterminated JSON object",
-			jsonInput:    `{"name": "John", "age": 30`,
-			expectedCode: http.StatusBadRequest,
+			name:        "empty body",
+			input:       ``,
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: "Request body must not be empty",
 		},
 		{
-			name:         "Invalid type - string as int",
-			jsonInput:    `{"name": "John", "age": "thirty"}`,
-			expectedCode: http.StatusBadRequest,
+			name:        "truncated object",
+			input:       `{"name": "John", "age": 30`,
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: "Request body contains badly-formed JSON at offset 26",
 		},
 		{
-			name:         "Unknown field with strict mode",
-			jsonInput:    `{"name": "John", "age": 30, "unknown_field": true}`,
-			expectedCode: http.StatusBadRequest,
+			name:        "wrong type for a field",
+			input:       `{"name": "John", "age": "thirty"}`,
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: `Request body contains an invalid value for the "age" field, expecting: int`,
 		},
 		{
-			name:         "Complex nested invalid JSON",
-			jsonInput:    `{"name": "John", "age": 30, "address": {"street": 123, "city": true}}`,
-			expectedCode: http.StatusBadRequest,
+			name:        "duplicate field",
+			input:       `{"name": "John", "name": "Jane"}`,
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: `Request body contains the duplicate field "name"`,
 		},
 		{
-			name:         "Empty string",
-			jsonInput:    ``,
-			expectedCode: http.StatusBadRequest,
+			name:        "trailing data after the value",
+			input:       `{"name": "John"}{"name": "Jane"}`,
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: "Request body contains badly-formed JSON at offset 16",
+		},
+		{
+			name:        "invalid utf-8",
+			input:       "{\"name\": \"\xff\"}",
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: "Request body contains badly-formed JSON at offset 10",
+		},
+		{
+			name:        "unknown field rejected when configured",
+			input:       `{"name": "John", "nope": true}`,
+			opts:        []json.Options{json.RejectUnknownMembers(true)},
+			wantStatus:  http.StatusBadRequest,
+			wantMessage: `Request body contains unknown field "nope"`,
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			decoder := json.NewDecoder(strings.NewReader(tc.jsonInput))
-			decoder.DisallowUnknownFields() // To trigger unknown field errors
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-			var p Dummy
-			err := decoder.Decode(&p)
+			_, err := ReadJSONBody[dummy](strings.NewReader(tt.input), tt.opts...)
 
-			readErr := parseReadError(err)
-			assert.NotNil(t, readErr)
-			assert.Equal(t, tc.expectedCode, readErr.HTTPStatusCode)
+			var readErr *ReadError
+			require.ErrorAs(t, err, &readErr)
+
+			assert.Equal(t, tt.wantStatus, readErr.HTTPStatusCode)
+			assert.Equal(t, tt.wantMessage, readErr.Message)
 			assert.ErrorIs(t, err, readErr.UnderlyingErr)
 		})
 	}
+}
+
+// Unknown fields are ignored unless the caller opts in.
+func Test_ReadJSONBody_IgnoresUnknownFieldsByDefault(t *testing.T) {
+	t.Parallel()
+
+	got, err := ReadJSONBody[dummy](strings.NewReader(`{"name":"John","nope":true}`))
+
+	require.NoError(t, err)
+	assert.Equal(t, &dummy{Name: "John"}, got)
+}
+
+func Test_parseReadError_BodyTooLarge(t *testing.T) {
+	t.Parallel()
+
+	body := http.MaxBytesReader(
+		httptest.NewRecorder(),
+		io.NopCloser(strings.NewReader(`{"name":"a considerably longer value"}`)),
+		8,
+	)
+
+	_, err := ReadJSONBody[dummy](body)
+
+	var readErr *ReadError
+	require.ErrorAs(t, err, &readErr)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, readErr.HTTPStatusCode)
+	assert.Equal(t, "Request body must not be larger than 8 bytes", readErr.Message)
 }

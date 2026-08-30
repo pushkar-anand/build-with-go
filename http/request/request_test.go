@@ -111,3 +111,23 @@ func TestReader_ServesMultipleTypes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, list.Page)
 }
+
+func TestReader_WithRejectUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	v, err := validatorpkg.New()
+	require.NoError(t, err)
+
+	r := NewReader(slog.New(slog.DiscardHandler), v, WithRejectUnknownFields())
+
+	req := httptest.NewRequest(http.MethodPost, "/posts",
+		strings.NewReader(`{"title":"hello","nope":true}`))
+
+	_, err = r.ReadAndValidateJSON[createPost](req)
+
+	var readErr *ReadError
+	require.ErrorAs(t, err, &readErr)
+
+	assert.Equal(t, http.StatusBadRequest, readErr.HTTPStatusCode)
+	assert.Equal(t, `Request body contains unknown field "nope"`, readErr.Message)
+}

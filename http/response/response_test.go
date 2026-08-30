@@ -132,3 +132,21 @@ func TestJSONWriter_WriteError(t *testing.T) {
 func teapot() Problem {
 	return NewProblem().WithStatus(http.StatusTeapot).WithDetail("mapped").Build()
 }
+
+// encoding/json/v2 renders a nil slice as [] and a nil map as {}, where v1
+// rendered both as null. This pins that wire format so the change is explicit.
+func TestJSONWriter_NilSlicesAndMapsEncodeAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	type payload struct {
+		Posts []string          `json:"posts"`
+		Meta  map[string]string `json:"meta"`
+	}
+
+	w := httptest.NewRecorder()
+
+	NewJSONWriter(slog.New(slog.DiscardHandler)).
+		Ok(context.Background(), w, payload{})
+
+	assert.JSONEq(t, `{"posts":[],"meta":{}}`, w.Body.String())
+}

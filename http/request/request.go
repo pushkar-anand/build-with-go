@@ -2,7 +2,7 @@ package request
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,22 +21,48 @@ type (
 	// Reader provides functionality to read and validate HTTP request data
 	// It contains a logger for error reporting and a validator for request validation
 	Reader struct {
-		logger    *slog.Logger
-		validator validator
-		decoder   *schema.Decoder
+		logger      *slog.Logger
+		validator   validator
+		decoder     *schema.Decoder
+		jsonOptions []json.Options
 	}
+
+	Option interface {
+		apply(*Reader)
+	}
+
+	optionFunc func(*Reader)
 )
+
+func (fn optionFunc) apply(r *Reader) {
+	fn(r)
+}
+
+// WithRejectUnknownFields makes a JSON body carrying fields that do not map to
+// the target struct fail with a 400, instead of those fields being ignored.
+func WithRejectUnknownFields() Option {
+	return optionFunc(func(r *Reader) {
+		r.jsonOptions = append(r.jsonOptions, json.RejectUnknownMembers(true))
+	})
+}
 
 // NewReader creates a new Reader instance with the provided logger and validator
 func NewReader(
 	l *slog.Logger,
 	v validator,
+	opts ...Option,
 ) *Reader {
-	return &Reader{
+	r := &Reader{
 		logger:    l,
 		validator: v,
 		decoder:   schema.NewDecoder(),
 	}
+
+	for _, opt := range opts {
+		opt.apply(r)
+	}
+
+	return r
 }
 
 // ReadAndValidateJSON reads a JSON request body into a T and validates it
@@ -45,7 +71,7 @@ func NewReader(
 // It returns a ValidationError carrying the per-field failures when the body
 // parses but does not validate, and a ReadError when it cannot be parsed.
 func (r *Reader) ReadAndValidateJSON[T any](req *http.Request) (*T, error) {
-	body, err := ReadJSONBody[T](req.Body)
+	body, err := ReadJSONBody[T](req.Body, r.jsonOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +118,14 @@ func (r *Reader) ReadAndValidateQueryParams[T any](req *http.Request) (*T, error
 }
 
 // ReadJSONBody decodes a JSON input stream into a struct of type T.
-// It handles any parsing errors and returns them as ReadError.
-// Returns a pointer to the populated struct and any error encountered
-func ReadJSONBody[T any](r io.Reader) (*T, error) {
+//
+// The stream must hold exactly one JSON value: anything trailing it is an
+// error, rather than being silently ignored. Parsing failures are returned as
+// a ReadError.
+func ReadJSONBody[T any](r io.Reader, opts ...json.Options) (*T, error) {
 	v := new(T)
 
-	err := json.NewDecoder(r).Decode(v)
+	err := json.UnmarshalRead(r, v, opts...)
 	if err != nil {
 		return nil, parseReadError(err)
 	}
