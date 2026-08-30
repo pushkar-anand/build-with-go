@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 )
 
@@ -22,6 +23,17 @@ func (fn optionFunc) apply(s *Server) {
 func WithHostPort(addr string, port int) Option {
 	return optionFunc(func(s *Server) {
 		s.server.Addr = fmt.Sprintf("%s:%d", addr, port)
+	})
+}
+
+// WithListener makes the server accept connections from a caller-supplied
+// listener instead of binding its own. WithHostPort is ignored when set.
+//
+// This is mainly useful in tests, where an in-memory listener avoids real
+// network I/O, and for handing the server a socket bound elsewhere.
+func WithListener(ln net.Listener) Option {
+	return optionFunc(func(s *Server) {
+		s.listener = ln
 	})
 }
 
