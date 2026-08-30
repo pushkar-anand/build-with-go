@@ -3,13 +3,14 @@ package request
 import (
 	"context"
 	"encoding/json"
-	"github.com/gorilla/schema"
-	"github.com/pushkar-anand/build-with-go/logger"
-	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+
+	"github.com/gorilla/schema"
+	"github.com/pushkar-anand/build-with-go/logger"
+	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 )
 
 type (
@@ -23,12 +24,6 @@ type (
 		logger    *slog.Logger
 		validator validator
 		decoder   *schema.Decoder
-	}
-
-	// TypedReader is a generic wrapper around Reader that provides type-safe request parsing
-	// The type parameter T represents the expected request body structure
-	TypedReader[T any] struct {
-		*Reader
 	}
 )
 
@@ -44,22 +39,18 @@ func NewReader(
 	}
 }
 
-// NewTypedReader creates a new TypedReader for a specific type T
-// It wraps an existing Reader to provide type-safe request handling
-func NewTypedReader[T any](r *Reader) TypedReader[T] {
-	return TypedReader[T]{Reader: r}
-}
-
-// ReadAndValidateJSON reads a JSON request body and validates it against the struct tags.
-// It returns a pointer to the parsed struct of type T and any error that occurred.
-// If validation fails, it returns a ValidationError with details about the failure
-func (t *TypedReader[T]) ReadAndValidateJSON(r *http.Request) (*T, error) {
-	body, err := ReadJSONBody[T](r.Body)
+// ReadAndValidateJSON reads a JSON request body into a T and validates it
+// against the struct tags.
+//
+// It returns a ValidationError carrying the per-field failures when the body
+// parses but does not validate, and a ReadError when it cannot be parsed.
+func (r *Reader) ReadAndValidateJSON[T any](req *http.Request) (*T, error) {
+	body, err := ReadJSONBody[T](req.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	err = t.validate(r.Context(), body)
+	err = r.validate(req.Context(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +58,15 @@ func (t *TypedReader[T]) ReadAndValidateJSON(r *http.Request) (*T, error) {
 	return body, nil
 }
 
-func (t *TypedReader[T]) ReadAndValidateForm(r *http.Request) (*T, error) {
-	data, err := ReadFormData[T](r, t.decoder)
+// ReadAndValidateForm reads form data into a T and validates it against the
+// struct tags. Fields are matched by their schema tag, falling back to json.
+func (r *Reader) ReadAndValidateForm[T any](req *http.Request) (*T, error) {
+	data, err := ReadFormData[T](req, r.decoder)
 	if err != nil {
 		return nil, err
 	}
 
-	err = t.validate(r.Context(), data)
+	err = r.validate(req.Context(), data)
 	if err != nil {
 		return nil, err
 	}
@@ -81,13 +74,16 @@ func (t *TypedReader[T]) ReadAndValidateForm(r *http.Request) (*T, error) {
 	return data, nil
 }
 
-func (t *TypedReader[T]) ReadAndValidateQueryParams(r *http.Request) (*T, error) {
-	params, err := ReadQueryParams[T](r.URL.Query(), t.decoder)
+// ReadAndValidateQueryParams reads the query string into a T and validates it
+// against the struct tags. Fields are matched by their schema tag, falling back
+// to json.
+func (r *Reader) ReadAndValidateQueryParams[T any](req *http.Request) (*T, error) {
+	params, err := ReadQueryParams[T](req.URL.Query(), r.decoder)
 	if err != nil {
 		return nil, err
 	}
 
-	err = t.validate(r.Context(), params)
+	err = r.validate(req.Context(), params)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +141,7 @@ func ReadFormData[T any](r *http.Request, d *schema.Decoder) (*T, error) {
 func (r *Reader) validate(ctx context.Context, v any) error {
 	result, err := r.validator.ValidateStruct(ctx, v)
 	if err != nil {
-		r.logger.Error("failed to validate body", logger.Error(err))
+		r.logger.ErrorContext(ctx, "failed to validate body", logger.Error(err))
 
 		return &ReadError{
 			HTTPStatusCode: http.StatusInternalServerError,
@@ -156,12 +152,10 @@ func (r *Reader) validate(ctx context.Context, v any) error {
 
 	if !result.Valid {
 		return &ValidationError{
-			ReadError: ReadError{
-				HTTPStatusCode: http.StatusUnprocessableEntity,
-				Message:        "Request is not valid",
-				UnderlyingErr:  nil,
-			},
-			Result: result,
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			Message:        "Request is not valid",
+			UnderlyingErr:  nil,
+			Result:         result,
 		}
 	}
 
