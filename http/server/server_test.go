@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -14,6 +15,51 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNew_Defaults(t *testing.T) {
+	t.Parallel()
+
+	s := New(getTestHandler())
+
+	assert.Equal(t, "0.0.0.0:8080", s.server.Addr)
+	assert.Equal(t, 15*time.Second, s.server.ReadTimeout)
+	assert.Equal(t, 5*time.Second, s.server.ReadHeaderTimeout)
+	assert.Equal(t, 30*time.Second, s.server.WriteTimeout)
+	assert.Equal(t, 120*time.Second, s.server.IdleTimeout)
+	assert.Equal(t, 5*time.Second, s.shutdownTimeout)
+}
+
+func TestNew_Options(t *testing.T) {
+	t.Parallel()
+
+	log := slog.New(slog.DiscardHandler)
+	ln := newPipeListener()
+
+	s := New(
+		getTestHandler(),
+		WithHostPort("127.0.0.1", 9090),
+		WithReadTimeout(time.Second),
+		WithReadHeaderTimeout(2*time.Second),
+		WithWriteTimeout(3*time.Second),
+		WithIdleTimeout(4*time.Second),
+		WithShutdownTimeout(6*time.Second),
+		WithMaxHeaderBytes(4096),
+		WithMaxHeaderValueCount(64),
+		WithLogger(log),
+		WithListener(ln),
+	)
+
+	assert.Equal(t, "127.0.0.1:9090", s.server.Addr)
+	assert.Equal(t, time.Second, s.server.ReadTimeout)
+	assert.Equal(t, 2*time.Second, s.server.ReadHeaderTimeout)
+	assert.Equal(t, 3*time.Second, s.server.WriteTimeout)
+	assert.Equal(t, 4*time.Second, s.server.IdleTimeout)
+	assert.Equal(t, 6*time.Second, s.shutdownTimeout)
+	assert.Equal(t, 4096, s.server.MaxHeaderBytes)
+	assert.Equal(t, 64, s.server.MaxHeaderValueCount)
+	assert.Same(t, log, s.log)
+	assert.Same(t, ln, s.listener)
+}
 
 func TestServer_Serve(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
