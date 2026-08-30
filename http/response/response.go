@@ -2,7 +2,7 @@ package response
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -71,7 +71,7 @@ func (h *JSONWriter) writeJSON(
 		return
 	}
 
-	err := json.NewEncoder(w).Encode(v)
+	err := json.MarshalWrite(w, v)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "Failed to encode response", logger.Error(err))
 	}
