@@ -39,6 +39,14 @@ func WithWriteTimeout(d time.Duration) Option {
 	})
 }
 
+// WithShutdownTimeout sets how long Serve waits for in-flight requests to
+// complete after its context is canceled, before forcing the shutdown.
+func WithShutdownTimeout(d time.Duration) Option {
+	return optionFunc(func(s *Server) {
+		s.shutdownTimeout = d
+	})
+}
+
 // WithLogger can be used to set a custom slog handler for the logs of the server
 func WithLogger(log *slog.Logger) Option {
 	return optionFunc(func(s *Server) {
