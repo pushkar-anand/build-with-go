@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
+
+	"github.com/pushkar-anand/build-with-go/logger"
 )
 
 type Server struct {
-	log    *slog.Logger
-	server *http.Server
+	log             *slog.Logger
+	server          *http.Server
+	shutdownTimeout time.Duration
 }
 
 // New creates an instance of Server
@@ -20,7 +24,8 @@ func New(
 	opts ...Option,
 ) *Server {
 	s := &Server{
-		log: slog.Default(),
+		log:             slog.Default(),
+		shutdownTimeout: defaultShutdownTimeout,
 		server: &http.Server{
 			Addr:         fmt.Sprintf("%s:%d", defaultHost, defaultPort),
 			Handler:      handler,
@@ -39,30 +44,47 @@ func New(
 
 // Serve starts the HTTP server on the specified host/port.
 //
-// It accepts a context.Context. When the context is canceled, the server is shutdown
+// It accepts a context.Context. When the context is canceled the server stops
+// accepting new connections and waits for the in-flight requests to complete,
+// up to the configured shutdown timeout. Serve only returns once that drain has
+// finished, so callers can safely exit as soon as it does.
 func (s *Server) Serve(ctx context.Context) error {
 	s.log.InfoContext(ctx, "starting server", slog.String("address", s.server.Addr))
 
+	// Derived so that a ListenAndServe failure also releases the goroutine below.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
 	go func() {
-		select {
-		case <-ctx.Done():
-			s.log.InfoContext(ctx, "shutting down server")
+		defer wg.Done()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+		<-ctx.Done()
 
-			err := s.server.Shutdown(ctx)
-			if err != nil {
-				s.log.ErrorContext(ctx, "failed to shutdown server", slog.Any("error", err))
-				return
-			}
+		s.log.InfoContext(ctx, "shutting down server")
+
+		// WithoutCancel keeps the context values while dropping the cancellation,
+		// so the drain gets the full shutdown timeout.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.shutdownTimeout)
+		defer cancel()
+
+		err := s.server.Shutdown(shutdownCtx)
+		if err != nil {
+			s.log.ErrorContext(shutdownCtx, "failed to shutdown server", logger.Error(err))
 		}
 	}()
 
 	err := s.server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("server.Start: error starting server: %w", err)
+		return fmt.Errorf("server.Serve: error starting server: %w", err)
 	}
+
+	// ListenAndServe returns as soon as Shutdown is called, so wait for the
+	// drain to actually finish before reporting that the server has stopped.
+	wg.Wait()
 
 	return nil
 }

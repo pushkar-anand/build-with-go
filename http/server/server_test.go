@@ -3,11 +3,15 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/assert"
+	"io"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServer_Serve(t *testing.T) {
@@ -52,6 +56,73 @@ func TestServer_Serve(t *testing.T) {
 			return
 		}
 	})
+}
+
+func TestServer_Serve_GracefulShutdown(t *testing.T) {
+	port, err := getFreePortForTest()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		handlerStarted   = make(chan struct{})
+		handlerCompleted atomic.Bool
+	)
+
+	m := http.NewServeMux()
+	m.HandleFunc("/slow", func(w http.ResponseWriter, r *http.Request) {
+		close(handlerStarted)
+		time.Sleep(300 * time.Millisecond)
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("done"))
+
+		handlerCompleted.Store(true)
+	})
+
+	s := New(
+		m,
+		WithHostPort("0.0.0.0", port),
+		WithReadTimeout(5*time.Second),
+		WithWriteTimeout(5*time.Second),
+	)
+
+	serveReturned := make(chan error, 1)
+	go func() { serveReturned <- s.Serve(ctx) }()
+
+	waitUntilPortIsOpen(t, port)
+
+	reqDone := make(chan struct{})
+	go func() {
+		defer close(reqDone)
+
+		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/slow", port))
+		if !assert.NoError(t, err) {
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "done", string(body))
+	}()
+
+	// Cancel while the request is still being served.
+	<-handlerStarted
+	cancel()
+
+	select {
+	case err := <-serveReturned:
+		assert.NoError(t, err)
+		assert.True(t, handlerCompleted.Load(),
+			"Serve returned before the in-flight request finished")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after context cancellation")
+	}
+
+	<-reqDone
 }
 
 func getTestHandler() http.Handler {
