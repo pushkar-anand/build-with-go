@@ -152,12 +152,10 @@ func (r *Reader) validate(ctx context.Context, v any) error {
 
 	if !result.Valid {
 		return &ValidationError{
-			ReadError: ReadError{
-				HTTPStatusCode: http.StatusUnprocessableEntity,
-				Message:        "Request is not valid",
-				UnderlyingErr:  nil,
-			},
-			Result: result,
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			Message:        "Request is not valid",
+			UnderlyingErr:  nil,
+			Result:         result,
 		}
 	}
 
