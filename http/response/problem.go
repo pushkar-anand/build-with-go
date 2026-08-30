@@ -117,8 +117,11 @@ func buildProblemJSON(r *http.Request, p Problem) map[string]any {
 	m["instance"] = r.RequestURI
 
 	if t := p.Type(); t == "" || strings.EqualFold(t, "about:blank") {
+		// RFC 9457: when type is about:blank the title should be the status text.
 		m["type"] = "about:blank"
 		m["title"] = http.StatusText(p.Status())
+	} else {
+		m["type"] = t
 	}
 
 	for k, v := range p.CustomMembers() {

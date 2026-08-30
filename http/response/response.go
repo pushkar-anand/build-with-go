@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/pushkar-anand/build-with-go/http/request"
-	"github.com/pushkar-anand/build-with-go/logger"
 	"log/slog"
 	"net/http"
+
+	"github.com/pushkar-anand/build-with-go/logger"
 )
 
 type (
@@ -41,7 +41,7 @@ func (h *JSONWriter) Write(ctx context.Context, w http.ResponseWriter, statusCod
 }
 
 func (h *JSONWriter) WriteError(ctx context.Context, r *http.Request, w http.ResponseWriter, err error) {
-	problem := h.getMappedProblem(err)
+	problem := h.getMappedProblem(ctx, err)
 	body := buildProblemJSON(r, problem)
 
 	h.writeJSON(ctx, w, problem.Status(), body)
@@ -102,22 +102,22 @@ func (h *JSONWriter) ToStandardHandlerWithContext(handler HandlerWithContextFunc
 	}
 }
 
-func (h *JSONWriter) getMappedProblem(err error) Problem {
-	var (
-		readErr       *request.ReadError
-		validationErr *request.ValidationError
-	)
-
-	if errors.As(err, &readErr) {
-		return readErr
-	}
-
-	if errors.As(err, &validationErr) {
-		return validationErr
+// getMappedProblem resolves err to the Problem describing the response.
+//
+// An error that implements Problem already describes itself, so it is used as
+// it is. That covers request.ReadError and request.ValidationError without this
+// package having to know those types, and lets callers give their own domain
+// errors a response without configuring a mapper at all.
+//
+// Anything else falls to the configured mapper, then to a generic 500.
+func (h *JSONWriter) getMappedProblem(ctx context.Context, err error) Problem {
+	var problem Problem
+	if errors.As(err, &problem) {
+		return problem
 	}
 
 	if h.errProblemMapper == nil {
-		h.logger.ErrorContext(context.Background(), "failed to handle request", logger.Error(err))
+		h.logger.ErrorContext(ctx, "failed to handle request", logger.Error(err))
 		return defaultProblem
 	}
 
