@@ -1,7 +1,6 @@
 package http_test
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -70,7 +69,7 @@ func TestRequestErrorsAreWrittenAsProblems(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/posts", nil)
 
 			response.NewJSONWriter(slog.New(slog.DiscardHandler)).
-				WriteError(context.Background(), r, w, tt.err)
+				WriteError(w, r, tt.err)
 
 			assert.Equal(t, tt.wantStatus, w.Code)
 
