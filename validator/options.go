@@ -14,6 +14,8 @@ func (f optionFunc) apply(v *Validator) {
 	f(v)
 }
 
+// WithCustomTags registers validation rules, keyed by the tag name that
+// selects them in a struct tag.
 func WithCustomTags(rules map[string]ValidationFunc) Option {
 	return optionFunc(func(s *Validator) {
 		maps.Insert(s.rules, maps.All(rules))
@@ -27,6 +29,7 @@ func WithCustomMessage(tag string, messageFn MessageFunc) Option {
 	})
 }
 
+// WithCustomMessages overrides the message produced for several tags at once.
 func WithCustomMessages(messages map[string]MessageFunc) Option {
 	return optionFunc(func(s *Validator) {
 		maps.Insert(s.messages, maps.All(messages))

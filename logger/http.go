@@ -13,6 +13,8 @@ type responseWriter struct {
 	size   int
 }
 
+// WriteHeader records the status code on its way through, so the middleware
+// can log what was actually sent.
 func (rw *responseWriter) WriteHeader(status int) {
 	if rw.status == 0 {
 		rw.status = status
@@ -20,6 +22,8 @@ func (rw *responseWriter) WriteHeader(status int) {
 	rw.ResponseWriter.WriteHeader(status)
 }
 
+// Write records the response size, and the implicit 200 that writing without
+// an explicit WriteHeader produces.
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if rw.status == 0 {
 		rw.status = http.StatusOK
@@ -29,6 +33,8 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+// Unwrap exposes the underlying ResponseWriter so http.ResponseController can
+// reach the flushing and hijacking it supports. Streaming needs this.
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
@@ -38,6 +44,8 @@ type httpLogger struct {
 	next http.Handler
 }
 
+// ServeHTTP times the request, then logs it once the handler returns, at error
+// level for a 5xx and info otherwise.
 func (l *httpLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 

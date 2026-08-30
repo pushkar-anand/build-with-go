@@ -1,3 +1,9 @@
+// Package request decodes and validates HTTP request data.
+//
+// A Reader turns a JSON body, form, or query string into a typed value and
+// validates it, reporting failures as errors that already describe their own
+// HTTP response: returning one from a handler is enough for
+// response.JSONWriter to render it.
 package request
 
 import (

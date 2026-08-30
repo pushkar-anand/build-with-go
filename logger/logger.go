@@ -1,9 +1,15 @@
+// Package logger builds slog loggers, and the HTTP middleware that logs
+// requests through one.
+//
+// Loggers built here read the request ID from the context, so a handler that
+// logs with the *Context methods gets it attached without asking.
 package logger
 
 import (
 	"log/slog"
 )
 
+// Format selects how log records are encoded.
 type Format int
 
 const (
@@ -11,6 +17,11 @@ const (
 	FormatText
 )
 
+// New returns a slog.Logger that writes JSON to stderr at info level unless
+// options say otherwise.
+//
+// The returned logger reads the request ID from the context, so records logged
+// with the *Context methods carry it without the caller passing it along.
 func New(options ...Option) *slog.Logger {
 	c := defaultConfig()
 
