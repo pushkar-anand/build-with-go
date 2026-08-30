@@ -136,7 +136,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 		err := s.server.Shutdown(shutdownCtx)
 		if err != nil {
-			s.log.ErrorContext(shutdownCtx, "failed to shutdown server", logger.Error(err))
+			s.log.ErrorContext(shutdownCtx, "failed to shutdown server", logger.Err(err))
 		}
 	})
 

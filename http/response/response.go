@@ -89,7 +89,7 @@ func (h *JSONWriter) writeJSON(
 	// renders with a different key order each time.
 	err := json.MarshalWrite(w, v, json.Deterministic(true))
 	if err != nil {
-		h.logger.ErrorContext(ctx, "Failed to encode response", logger.Error(err))
+		h.logger.ErrorContext(ctx, "failed to encode response", logger.Err(err))
 	}
 }
 
@@ -126,7 +126,7 @@ func (h *JSONWriter) getMappedProblem(ctx context.Context, err error) Problem {
 	}
 
 	if h.errProblemMapper == nil {
-		h.logger.ErrorContext(ctx, "failed to handle request", logger.Error(err))
+		h.logger.ErrorContext(ctx, "failed to handle request", logger.Err(err))
 		return defaultProblem
 	}
 
