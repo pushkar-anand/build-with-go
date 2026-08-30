@@ -2,7 +2,7 @@ package response
 
 import (
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -123,7 +123,7 @@ func TestJSONWriter_WriteError(t *testing.T) {
 			assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 
 			var got map[string]any
-			require.NoError(t, json.NewDecoder(w.Body).Decode(&got))
+			require.NoError(t, json.UnmarshalRead(w.Body, &got))
 			assert.Equal(t, tt.wantBody, got)
 		})
 	}
@@ -149,4 +149,63 @@ func TestJSONWriter_NilSlicesAndMapsEncodeAsEmpty(t *testing.T) {
 		Ok(context.Background(), w, payload{})
 
 	assert.JSONEq(t, `{"posts":[],"meta":{}}`, w.Body.String())
+}
+
+func TestJSONWriter_ToStandardHandler(t *testing.T) {
+	t.Parallel()
+
+	writer := NewJSONWriter(slog.New(slog.DiscardHandler))
+
+	t.Run("a handler returning nil writes nothing extra", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
+
+		writer.ToStandardHandler(func(w http.ResponseWriter, _ *http.Request) error {
+			w.WriteHeader(http.StatusCreated)
+			return nil
+		})(w, r)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.Empty(t, w.Body.String())
+	})
+
+	t.Run("a returned error becomes a problem document", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
+
+		writer.ToStandardHandler(func(http.ResponseWriter, *http.Request) error {
+			return &domainProblem{status: http.StatusConflict, detail: "item is out of stock"}
+		})(w, r)
+
+		assert.Equal(t, http.StatusConflict, w.Code)
+		assert.Equal(t, "application/problem+json; charset=utf-8", w.Header().Get("Content-Type"))
+
+		var got map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		assert.Equal(t, "item is out of stock", got["detail"])
+	})
+
+	// The context a handler derives reaches only what it attaches it to.
+	t.Run("the handler reads its context from the request", func(t *testing.T) {
+		t.Parallel()
+
+		type key struct{}
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/orders", nil)
+		r = r.WithContext(context.WithValue(r.Context(), key{}, "carried"))
+
+		var seen any
+
+		writer.ToStandardHandler(func(_ http.ResponseWriter, r *http.Request) error {
+			seen = r.Context().Value(key{})
+			return nil
+		})(w, r)
+
+		assert.Equal(t, "carried", seen)
+	})
 }
