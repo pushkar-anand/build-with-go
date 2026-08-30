@@ -2,7 +2,9 @@ package server_test
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,17 +14,58 @@ import (
 	"github.com/pushkar-anand/build-with-go/http/server"
 )
 
-// Serve blocks until ctx is cancelled, then stops accepting connections and
-// waits for in-flight requests to finish before returning. Cancelling on
-// SIGINT/SIGTERM is what makes a deployment roll without dropping requests.
+// Serve returns only once in-flight requests have finished, so cancelling the
+// context is enough to stop cleanly.
 func Example() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ok")
 	})
 
+	srv := server.New(mux, server.WithHostPort("127.0.0.1", 0))
+
+	// Binding before serving means Addr reports the port the kernel assigned.
+	if err := srv.Listen(); err != nil {
+		log.Fatal(err)
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+
+	stopped := make(chan error, 1)
+	go func() { stopped <- srv.Serve(ctx) }()
+
+	resp, err := http.Get("http://" + srv.Addr() + "/healthz")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_ = resp.Body.Close()
+
+	fmt.Print(string(body))
+
+	stop()
+
+	if err := <-stopped; err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("stopped cleanly")
+
+	// Output:
+	// ok
+	// stopped cleanly
+}
+
+// In a real service the context comes from the signals the platform sends when
+// it wants the process to go away.
+func Example_gracefulShutdown() {
 	srv := server.New(
-		mux,
+		http.NewServeMux(),
 		server.WithHostPort("0.0.0.0", 8080),
 		server.WithShutdownTimeout(10*time.Second),
 	)
@@ -30,36 +73,21 @@ func Example() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Returns only once the drain has finished, so it is safe to exit after it.
 	if err := srv.Serve(ctx); err != nil {
-		slog.Error("server failed", slog.Any("error", err))
-		os.Exit(1)
+		log.Fatal(err)
 	}
-}
-
-// Binding before serving lets the caller learn the assigned port. Useful in
-// tests: port 0 avoids racing to reserve a free one.
-func ExampleServer_Listen() {
-	srv := server.New(http.NewServeMux(), server.WithHostPort("127.0.0.1", 0))
-
-	if err := srv.Listen(); err != nil {
-		slog.Error("listen failed", slog.Any("error", err))
-		return
-	}
-
-	addr := srv.Addr() // 127.0.0.1:<assigned port>
-
-	go func() { _ = srv.Serve(context.Background()) }()
-
-	_ = addr
 }
 
 // A streaming endpoint needs the write timeout off, since it caps how long a
 // single response may take.
-func ExampleWithWriteTimeout() {
-	_ = server.New(
+func Example_streaming() {
+	srv := server.New(
 		http.NewServeMux(),
 		server.WithWriteTimeout(0),
 		server.WithIdleTimeout(2*time.Minute),
 	)
+
+	if err := srv.Serve(context.Background()); err != nil {
+		log.Fatal(err)
+	}
 }
