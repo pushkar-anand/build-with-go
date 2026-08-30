@@ -62,8 +62,7 @@ func TestNew_Options(t *testing.T) {
 }
 
 func TestServer_Serve(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	s := New(getTestHandler(), WithHostPort("127.0.0.1", 0))
 

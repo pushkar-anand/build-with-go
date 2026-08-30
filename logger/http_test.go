@@ -35,7 +35,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.Equal(t, "OK", rr.Body.String())
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -70,7 +70,7 @@ func TestNewHTTPLogger(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -122,7 +122,7 @@ func TestNewHTTPLogger(t *testing.T) {
 
 		handler.ServeHTTP(rr, req)
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestNewHTTPLogger(t *testing.T) {
 
 		handler.ServeHTTP(rr, req)
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -176,7 +176,7 @@ func TestNewHTTPLogger(t *testing.T) {
 
 		handler.ServeHTTP(rr, req)
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -199,7 +199,7 @@ func TestNewHTTPLogger(t *testing.T) {
 
 		handler.ServeHTTP(rr, req)
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
@@ -234,7 +234,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.Equal(t, "data: test\n\n", rr.Body.String())
 
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 

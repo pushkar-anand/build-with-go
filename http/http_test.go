@@ -39,10 +39,8 @@ func TestRequestErrorsAreWrittenAsProblems(t *testing.T) {
 		{
 			name: "validation error carries its failures as a custom member",
 			err: &request.ValidationError{
-				ReadError: request.ReadError{
-					HTTPStatusCode: http.StatusUnprocessableEntity,
-					Message:        "Request is not valid",
-				},
+				HTTPStatusCode: http.StatusUnprocessableEntity,
+				Message:        "Request is not valid",
 				Problems: map[string]any{
 					"title": validator.Reason{Rule: "required", Message: "title is required"},
 				},

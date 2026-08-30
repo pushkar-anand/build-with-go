@@ -76,9 +76,9 @@ func buildValidator() *validator.Validate {
 
 	// register function to get tag name from JSON tags.
 	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		name, _, _ := strings.Cut(fld.Tag.Get("json"), ",")
 		if name == "" {
-			name = strings.SplitN(fld.Tag.Get("schema"), ",", 2)[0]
+			name, _, _ = strings.Cut(fld.Tag.Get("schema"), ",")
 		}
 
 		if name == "-" {

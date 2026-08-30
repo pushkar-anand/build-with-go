@@ -1,6 +1,7 @@
 package response
 
 import (
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -124,9 +125,7 @@ func buildProblemJSON(r *http.Request, p Problem) map[string]any {
 		m["type"] = t
 	}
 
-	for k, v := range p.CustomMembers() {
-		m[k] = v
-	}
+	maps.Copy(m, p.CustomMembers())
 
 	return m
 }
