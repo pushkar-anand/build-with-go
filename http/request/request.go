@@ -10,19 +10,32 @@ import (
 
 	"github.com/gorilla/schema"
 	"github.com/pushkar-anand/build-with-go/logger"
-	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 )
 
 type (
-	validator interface {
-		ValidateStruct(context.Context, any) (*validatorpkg.Result, error)
+	// Validator validates a decoded request value.
+	//
+	// It returns the problems describing why v is invalid, keyed by field name,
+	// or nil when v is valid. Problems are written into the error response as
+	// they are, so they must be JSON-encodable.
+	Validator interface {
+		ValidateRequest(ctx context.Context, v any) (problems map[string]any, err error)
+	}
+
+	// SelfValidator is implemented by request types that validate themselves.
+	//
+	// A type that implements it is validated by its own Valid method instead of
+	// the Reader's Validator, which makes rules spanning several fields plain Go
+	// rather than something to encode in a struct tag.
+	SelfValidator interface {
+		Valid(ctx context.Context) (problems map[string]string)
 	}
 
 	// Reader provides functionality to read and validate HTTP request data
 	// It contains a logger for error reporting and a validator for request validation
 	Reader struct {
 		logger      *slog.Logger
-		validator   validator
+		validator   Validator
 		decoder     *schema.Decoder
 		jsonOptions []json.Options
 	}
@@ -46,10 +59,12 @@ func WithRejectUnknownFields() Option {
 	})
 }
 
-// NewReader creates a new Reader instance with the provided logger and validator
+// NewReader creates a new Reader instance with the provided logger and validator.
+//
+// v may be nil, in which case only types implementing SelfValidator are validated.
 func NewReader(
 	l *slog.Logger,
-	v validator,
+	v Validator,
 	opts ...Option,
 ) *Reader {
 	r := &Reader{
@@ -167,7 +182,16 @@ func ReadFormData[T any](r *http.Request, d *schema.Decoder) (*T, error) {
 }
 
 func (r *Reader) validate(ctx context.Context, v any) error {
-	result, err := r.validator.ValidateStruct(ctx, v)
+	// A type that validates itself is taken at its word.
+	if sv, ok := v.(SelfValidator); ok {
+		return newValidationError(stringProblems(sv.Valid(ctx)))
+	}
+
+	if r.validator == nil {
+		return nil
+	}
+
+	problems, err := r.validator.ValidateRequest(ctx, v)
 	if err != nil {
 		r.logger.ErrorContext(ctx, "failed to validate body", logger.Error(err))
 
@@ -178,14 +202,19 @@ func (r *Reader) validate(ctx context.Context, v any) error {
 		}
 	}
 
-	if !result.Valid {
-		return &ValidationError{
-			HTTPStatusCode: http.StatusUnprocessableEntity,
-			Message:        "Request is not valid",
-			UnderlyingErr:  nil,
-			Result:         result,
-		}
+	return newValidationError(problems)
+}
+
+// stringProblems widens a SelfValidator's problems to the shared shape.
+func stringProblems(problems map[string]string) map[string]any {
+	if len(problems) == 0 {
+		return nil
 	}
 
-	return nil
+	widened := make(map[string]any, len(problems))
+	for field, message := range problems {
+		widened[field] = message
+	}
+
+	return widened
 }

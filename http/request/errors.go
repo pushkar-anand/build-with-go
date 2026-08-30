@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-
-	validatorpkg "github.com/pushkar-anand/build-with-go/validator"
 )
 
 type (
@@ -22,11 +20,11 @@ type (
 		UnderlyingErr  error
 	}
 
-	// ValidationError extends ReadError to include validation results
-	// It is used when request data fails validation checks
+	// ValidationError extends ReadError with the reason each field was rejected.
+	// It is used when request data parses but fails validation.
 	ValidationError struct {
 		ReadError
-		Result *validatorpkg.Result
+		Problems map[string]any
 	}
 )
 
@@ -56,12 +54,26 @@ func (e *ReadError) CustomMembers() map[string]any {
 	return nil
 }
 
+// newValidationError builds the error for a failed validation, or returns nil
+// when there is nothing to report.
+func newValidationError(problems map[string]any) error {
+	if len(problems) == 0 {
+		return nil
+	}
+
+	return &ValidationError{
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		Message:        "Request is not valid",
+		Problems:       problems,
+	}
+}
+
 // Error returns the error message for ValidationError
 func (e *ValidationError) Error() string { return e.Message }
 
 func (e *ValidationError) CustomMembers() map[string]any {
 	return map[string]any{
-		"context": e.Result,
+		"context": e.Problems,
 	}
 }
 
