@@ -1,3 +1,8 @@
+// Package server runs an http.Server with a lifecycle tied to a context.
+//
+// Cancelling the context stops the server accepting connections and drains the
+// requests already in flight. Serve returns only once that drain has finished,
+// so a caller can exit as soon as it does.
 package server
 
 import (
@@ -13,6 +18,7 @@ import (
 	"github.com/pushkar-anand/build-with-go/logger"
 )
 
+// Server runs an http.Server whose lifetime follows a context.
 type Server struct {
 	log             *slog.Logger
 	server          *http.Server

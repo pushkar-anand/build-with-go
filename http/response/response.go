@@ -1,3 +1,9 @@
+// Package response writes JSON responses, and renders errors as RFC 9457
+// problem documents.
+//
+// Handlers report failure by returning an error rather than writing one. Any
+// error implementing Problem describes its own response; anything else goes
+// through the mapper given to WithErrorProblemMapper, and then to a generic 500.
 package response
 
 import (
@@ -17,6 +23,7 @@ type (
 	}
 )
 
+// NewJSONWriter returns a JSONWriter that logs encoding failures to l.
 func NewJSONWriter(
 	l *slog.Logger,
 	opts ...Option,

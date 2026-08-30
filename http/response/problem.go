@@ -35,6 +35,8 @@ type (
 
 var defaultProblem = NewProblem().Build()
 
+// NewProblem starts building a Problem. It defaults to a 500 with a blank
+// type, so only the parts that differ need setting.
 func NewProblem() *ProblemBuilder {
 	return &ProblemBuilder{
 		problemType:   "about:blank",
@@ -79,6 +81,7 @@ func (pb *ProblemBuilder) WithCustomMember(key string, value any) *ProblemBuilde
 	return pb
 }
 
+// Build returns the Problem described by the builder.
 func (pb *ProblemBuilder) Build() Problem {
 	return &customProblem{
 		problemType:   pb.problemType,
@@ -89,22 +92,28 @@ func (pb *ProblemBuilder) Build() Problem {
 	}
 }
 
+// Type implements Problem, returning the problem type URI.
 func (cp *customProblem) Type() string {
 	return cp.problemType
 }
 
+// Title implements Problem, returning the short human-readable summary.
 func (cp *customProblem) Title() string {
 	return cp.problemTitle
 }
 
+// Status implements Problem, returning the HTTP status code to send.
 func (cp *customProblem) Status() int {
 	return cp.problemStatus
 }
 
+// Detail implements Problem, returning the explanation for this occurrence.
 func (cp *customProblem) Detail() string {
 	return cp.problemDetail
 }
 
+// CustomMembers implements Problem, returning the extra members to merge into
+// the problem document.
 func (cp *customProblem) CustomMembers() map[string]any {
 	return cp.customMembers
 }

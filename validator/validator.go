@@ -1,3 +1,9 @@
+// Package validator reports why a value fails its validation rules.
+//
+// It wraps go-playground/validator, reading field names from json tags, falling
+// back to schema tags, so the names a client sees match the names it sent.
+// Rules and messages can both be extended; see WithCustomTags and
+// WithCustomMessages.
 package validator
 
 import (
@@ -91,6 +97,11 @@ func buildValidator() *validator.Validate {
 	return v
 }
 
+// ValidateStruct checks s against its struct tags.
+//
+// A Result is returned for a value that is simply invalid; the error is
+// reserved for a validator that could not run at all, such as one given a rule
+// it does not know.
 func (v *Validator) ValidateStruct(ctx context.Context, s any) (*Result, error) {
 	err := v.validator.StructCtx(ctx, s)
 	if err != nil {

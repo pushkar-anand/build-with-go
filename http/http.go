@@ -1,3 +1,9 @@
+// Package http holds the contracts binding the http subpackages together.
+//
+// It declares no API of its own. The assertions here fail at compile time if
+// request's error types stop satisfying response.Problem, or if the validator
+// stops satisfying the interface request expects — relationships the packages
+// depend on but, by design, cannot import each other to state.
 package http
 
 import (

@@ -1,3 +1,6 @@
+// Package middleware holds HTTP middleware in the standard
+// func(http.Handler) http.Handler form, composable with anything else that
+// takes the same shape.
 package middleware
 
 import (

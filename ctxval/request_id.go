@@ -1,3 +1,8 @@
+// Package ctxval carries request-scoped values through a context.
+//
+// The request ID placed here by http/middleware is picked up automatically by
+// the logger, so every line logged during a request is attributable to it
+// without handlers passing the ID around.
 package ctxval
 
 import "context"
