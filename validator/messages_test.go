@@ -10,8 +10,6 @@ import (
 
 // TestValidatorCreateUserFriendlyMessage_defaultMessages tests the default error messages
 func TestValidatorCreateUserFriendlyMessage_defaultMessages(t *testing.T) {
-	resetValidator()
-
 	// Create validator with default messages
 	v, err := New()
 	require.NoError(t, err)
@@ -121,8 +119,6 @@ var customMessages = map[string]MessageFunc{
 
 // TestValidatorCreateUserFriendlyMessage_customMessages tests all custom error messages with a single validator
 func TestValidatorCreateUserFriendlyMessage_customMessages(t *testing.T) {
-	resetValidator()
-
 	// Create a single validator with all custom messages
 	v, err := New(
 		// Individual custom messages

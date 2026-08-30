@@ -31,38 +31,43 @@ type (
 )
 
 var (
-	vGlobal *Validator
-	vErr    error
-	once    sync.Once
+	defaultValidator *Validator
+	defaultErr       error
+	defaultOnce      sync.Once
 )
 
-// New returns a new Validator.
+// New returns a Validator configured by opts.
 //
-// It creates or reuses an existing validator if already created.
+// Each call builds a separate Validator, so options always take effect and one
+// caller's custom rules cannot leak into another's.
 func New(opts ...Option) (*Validator, error) {
-	once.Do(func() {
-		v := buildValidator()
+	v := &Validator{
+		validator: buildValidator(),
+		rules:     make(map[string]ValidationFunc),
+		messages:  maps.Clone(DefaultMessageMap),
+	}
 
-		vl := &Validator{
-			validator: v,
-			rules:     make(map[string]ValidationFunc),
-			messages:  maps.Clone(DefaultMessageMap),
-		}
+	for _, opt := range opts {
+		opt.apply(v)
+	}
 
-		for _, opt := range opts {
-			opt.apply(vl)
-		}
+	// We have to register the custom tags before using them.
+	err := v.registerCustomTags(v.rules)
+	if err != nil {
+		return nil, err
+	}
 
-		// We have to register the custom tags before using them.
-		err := vl.registerCustomTags(vl.rules)
-		if err == nil {
-			vGlobal = vl
-		}
+	return v, nil
+}
 
-		vErr = err
+// Default returns a Validator with no custom rules or messages, built once and
+// shared by every caller. Use New when the validator needs options.
+func Default() (*Validator, error) {
+	defaultOnce.Do(func() {
+		defaultValidator, defaultErr = New()
 	})
 
-	return vGlobal, vErr
+	return defaultValidator, defaultErr
 }
 
 // buildValidator builds the validator.Validate.

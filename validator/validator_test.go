@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -24,8 +23,6 @@ type (
 
 // TestValidator_ValidateStruct_basic tests basic validation functionality
 func TestValidator_ValidateStruct_basic(t *testing.T) {
-	resetValidator()
-
 	// Create a validator with a custom tag
 	v, err := New()
 	require.NoError(t, err)
@@ -194,8 +191,6 @@ var customTags = map[string]ValidationFunc{
 
 // TestValidator_ValidateStruct_customTags tests the custom validation tags functionality
 func TestValidator_ValidateStruct_customTags(t *testing.T) {
-	resetValidator()
-
 	type CustomTagsStruct struct {
 		AlphaField    string `json:"alpha_field" validate:"custom_alpha"`
 		NumericField  string `json:"numeric_field" validate:"custom_numeric"`
@@ -266,8 +261,44 @@ func TestValidator_ValidateStruct_customTags(t *testing.T) {
 }
 
 // Reset the validator singleton for tests
-func resetValidator() {
-	vGlobal = nil
-	vErr = nil
-	once = sync.Once{}
+
+// New used to memoise the first Validator behind a sync.Once, so options passed
+// to later calls were silently discarded.
+func TestNew_OptionsApplyToEveryCall(t *testing.T) {
+	t.Parallel()
+
+	type customTagStruct struct {
+		Field string `json:"field" validate:"custom_alpha"`
+	}
+
+	plain, err := New()
+	require.NoError(t, err)
+
+	withTags, err := New(WithCustomTags(customTags))
+	require.NoError(t, err)
+
+	assert.NotSame(t, plain, withTags, "each call should build its own Validator")
+
+	// The second validator knows the custom rule.
+	result, err := withTags.ValidateStruct(t.Context(), customTagStruct{Field: "onlyletters"})
+	require.NoError(t, err)
+	assert.True(t, result.Valid)
+
+	// The rules stay per-instance. Under the old singleton the second call
+	// returned the first validator, leaving custom_alpha unregistered — and
+	// go-playground panics on an unknown tag, so that surfaced at request time.
+	assert.Empty(t, plain.rules, "a validator built without options has no custom rules")
+	assert.NotEmpty(t, withTags.rules, "options must apply to this call")
+}
+
+func TestDefault_IsSharedAndStable(t *testing.T) {
+	t.Parallel()
+
+	first, err := Default()
+	require.NoError(t, err)
+
+	second, err := Default()
+	require.NoError(t, err)
+
+	assert.Same(t, first, second, "Default should hand back the same Validator")
 }
