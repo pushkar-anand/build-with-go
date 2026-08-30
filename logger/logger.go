@@ -7,6 +7,7 @@ package logger
 
 import (
 	"log/slog"
+	"strconv"
 )
 
 // Format selects how log records are encoded.
@@ -16,6 +17,19 @@ const (
 	FormatJSON Format = iota
 	FormatText
 )
+
+// String implements fmt.Stringer, so a Format reads as its name rather than as
+// the integer behind it.
+func (f Format) String() string {
+	switch f {
+	case FormatJSON:
+		return "json"
+	case FormatText:
+		return "text"
+	default:
+		return "Format(" + strconv.Itoa(int(f)) + ")"
+	}
+}
 
 // New returns a slog.Logger that writes JSON to stderr at info level unless
 // options say otherwise.
