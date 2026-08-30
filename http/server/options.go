@@ -44,10 +44,46 @@ func WithReadTimeout(d time.Duration) Option {
 	})
 }
 
-// WithWriteTimeout sets the write timeout for the server
+// WithReadHeaderTimeout sets how long the server allows for reading request
+// headers. It bounds a connection that dribbles headers out slowly, which the
+// read timeout alone does not once a request body is being read.
+func WithReadHeaderTimeout(d time.Duration) Option {
+	return optionFunc(func(s *Server) {
+		s.server.ReadHeaderTimeout = d
+	})
+}
+
+// WithWriteTimeout sets the write timeout for the server.
+//
+// Pass 0 to disable it. A write timeout caps the lifetime of a response, so
+// streaming endpoints such as SSE need it off.
 func WithWriteTimeout(d time.Duration) Option {
 	return optionFunc(func(s *Server) {
 		s.server.WriteTimeout = d
+	})
+}
+
+// WithIdleTimeout sets how long the server keeps an idle keep-alive connection
+// open while waiting for the next request.
+func WithIdleTimeout(d time.Duration) Option {
+	return optionFunc(func(s *Server) {
+		s.server.IdleTimeout = d
+	})
+}
+
+// WithMaxHeaderBytes sets the maximum size of the request headers the server
+// will accept. It defaults to http.DefaultMaxHeaderBytes.
+func WithMaxHeaderBytes(n int) Option {
+	return optionFunc(func(s *Server) {
+		s.server.MaxHeaderBytes = n
+	})
+}
+
+// WithMaxHeaderValueCount sets the maximum number of header values the server
+// will accept. It defaults to http.DefaultMaxHeaderValueCount.
+func WithMaxHeaderValueCount(n int) Option {
+	return optionFunc(func(s *Server) {
+		s.server.MaxHeaderValueCount = n
 	})
 }
 

@@ -31,11 +31,12 @@ func New(
 		log:             slog.Default(),
 		shutdownTimeout: defaultShutdownTimeout,
 		server: &http.Server{
-			Addr:         fmt.Sprintf("%s:%d", defaultHost, defaultPort),
-			Handler:      handler,
-			ReadTimeout:  defaultReadTimeout,
-			WriteTimeout: defaultWriteTimeout,
-			IdleTimeout:  defaultIdleTimout,
+			Addr:              fmt.Sprintf("%s:%d", defaultHost, defaultPort),
+			Handler:           handler,
+			ReadTimeout:       defaultReadTimeout,
+			ReadHeaderTimeout: defaultReadHeaderTimeout,
+			WriteTimeout:      defaultWriteTimeout,
+			IdleTimeout:       defaultIdleTimeout,
 		},
 	}
 
