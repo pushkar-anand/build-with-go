@@ -100,6 +100,29 @@ func (v *Validator) ValidateStruct(ctx context.Context, s any) (*Result, error) 
 	return &Result{Valid: true}, nil
 }
 
+// ValidateRequest reports why s is invalid, keyed by field name, or nil when s
+// is valid.
+//
+// It adapts Validator to the interface http/request expects, which is what lets
+// that package validate without depending on this one.
+func (v *Validator) ValidateRequest(ctx context.Context, s any) (map[string]any, error) {
+	result, err := v.ValidateStruct(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Valid {
+		return nil, nil
+	}
+
+	problems := make(map[string]any, len(result.Failed))
+	for field, reason := range result.Failed {
+		problems[field] = reason
+	}
+
+	return problems, nil
+}
+
 func (v *Validator) parseError(err error) (*Result, error) {
 	var (
 		invalidErr     *validator.InvalidValidationError

@@ -22,11 +22,11 @@ func TestRequestErrorsAreWrittenAsProblems(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
-		wantDetail string
-		wantCtx    bool
+		name        string
+		err         error
+		wantStatus  int
+		wantDetail  string
+		wantContext map[string]any
 	}{
 		{
 			name: "read error",
@@ -44,16 +44,21 @@ func TestRequestErrorsAreWrittenAsProblems(t *testing.T) {
 					HTTPStatusCode: http.StatusUnprocessableEntity,
 					Message:        "Request is not valid",
 				},
-				Result: &validator.Result{
-					Valid: false,
-					Failed: map[string]validator.Reason{
-						"title": {Rule: "required", Message: "title is required"},
-					},
+				Problems: map[string]any{
+					"title": validator.Reason{Rule: "required", Message: "title is required"},
 				},
 			},
 			wantStatus: http.StatusUnprocessableEntity,
 			wantDetail: "Request is not valid",
-			wantCtx:    true,
+			// The failures are the context member directly. Previously this was
+			// the validator's Result, wrapping them in Valid/Failed keys.
+			wantContext: map[string]any{
+				"title": map[string]any{
+					"value":   nil,
+					"rule":    "required",
+					"message": "title is required",
+				},
+			},
 		},
 	}
 
@@ -77,8 +82,10 @@ func TestRequestErrorsAreWrittenAsProblems(t *testing.T) {
 			assert.Equal(t, "about:blank", got["type"])
 			assert.Equal(t, "/posts", got["instance"])
 
-			if tt.wantCtx {
-				assert.NotNil(t, got["context"], "validation failures should be exposed")
+			if tt.wantContext != nil {
+				assert.Equal(t, tt.wantContext, got["context"])
+			} else {
+				assert.NotContains(t, got, "context")
 			}
 		})
 	}

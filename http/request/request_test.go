@@ -1,6 +1,7 @@
 package request
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -55,8 +56,11 @@ func TestReader_ReadAndValidateJSON(t *testing.T) {
 		require.ErrorAs(t, err, &verr)
 
 		assert.Equal(t, http.StatusUnprocessableEntity, verr.Status())
-		require.Contains(t, verr.Result.Failed, "title")
-		assert.Equal(t, "min", verr.Result.Failed["title"].Rule)
+		require.Contains(t, verr.Problems, "title")
+
+		reason, ok := verr.Problems["title"].(validatorpkg.Reason)
+		require.True(t, ok, "problems should carry the validator's reason")
+		assert.Equal(t, "min", reason.Rule)
 	})
 
 	t.Run("body does not parse", func(t *testing.T) {
@@ -130,4 +134,55 @@ func TestReader_WithRejectUnknownFields(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, readErr.HTTPStatusCode)
 	assert.Equal(t, `Request body contains unknown field "nope"`, readErr.Message)
+}
+
+// A type carrying its own Valid method is validated by it, so rules spanning
+// several fields need no struct tag.
+type dateRange struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
+func (d *dateRange) Valid(_ context.Context) map[string]string {
+	problems := make(map[string]string)
+
+	if d.Start == "" {
+		problems["start"] = "start is required"
+	}
+
+	if d.End != "" && d.End < d.Start {
+		problems["end"] = "end must not be before start"
+	}
+
+	return problems
+}
+
+func TestReader_SelfValidatingType(t *testing.T) {
+	t.Parallel()
+
+	// No Validator at all: the type validates itself.
+	r := NewReader(slog.New(slog.DiscardHandler), nil)
+
+	t.Run("valid", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/ranges",
+			strings.NewReader(`{"start":"2026-01-01","end":"2026-02-01"}`))
+
+		got, err := r.ReadAndValidateJSON[dateRange](req)
+
+		require.NoError(t, err)
+		assert.Equal(t, "2026-02-01", got.End)
+	})
+
+	t.Run("cross-field rule fails", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/ranges",
+			strings.NewReader(`{"start":"2026-02-01","end":"2026-01-01"}`))
+
+		_, err := r.ReadAndValidateJSON[dateRange](req)
+
+		var verr *ValidationError
+		require.ErrorAs(t, err, &verr)
+
+		assert.Equal(t, http.StatusUnprocessableEntity, verr.Status())
+		assert.Equal(t, "end must not be before start", verr.Problems["end"])
+	})
 }
