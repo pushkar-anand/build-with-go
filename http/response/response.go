@@ -8,7 +8,7 @@ package response
 
 import (
 	"context"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -108,6 +108,19 @@ func (h *JSONWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 		if err := handler(w, r); err != nil {
 			h.WriteError(w, r, err)
 		}
+	}
+}
+
+func (h *JSONWriter) HandleJSON[T any](fn func(r *http.Request) (T, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		v, err := fn(r)
+
+		if err != nil {
+			h.WriteError(w, r, err)
+			return
+		}
+
+		h.Ok(w, r, v)
 	}
 }
 
