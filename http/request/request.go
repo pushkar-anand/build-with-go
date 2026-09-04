@@ -40,10 +40,11 @@ type (
 	// Reader provides functionality to read and validate HTTP request data
 	// It contains a logger for error reporting and a validator for request validation
 	Reader struct {
-		logger      *slog.Logger
-		validator   Validator
-		decoder     *schema.Decoder
-		jsonOptions []json.Options
+		logger       *slog.Logger
+		validator    Validator
+		decoder      *schema.Decoder
+		jsonOptions  []json.Options
+		maxBodyBytes int64
 	}
 
 	Option interface {
@@ -62,6 +63,17 @@ func (fn optionFunc) apply(r *Reader) {
 func WithRejectUnknownFields() Option {
 	return optionFunc(func(r *Reader) {
 		r.jsonOptions = append(r.jsonOptions, json.RejectUnknownMembers(true))
+	})
+}
+
+// WithMaxBodyBytes caps how much of a request body ReadAndValidateJSON and
+// ReadAndValidateForm will read. A body that crosses it surfaces as a
+// ReadError carrying http.StatusRequestEntityTooLarge, rather than being
+// decoded as an unbounded stream into memory. Zero, the default, leaves the
+// body unbounded.
+func WithMaxBodyBytes(n int64) Option {
+	return optionFunc(func(r *Reader) {
+		r.maxBodyBytes = n
 	})
 }
 
@@ -92,7 +104,7 @@ func NewReader(
 // It returns a ValidationError carrying the per-field failures when the body
 // parses but does not validate, and a ReadError when it cannot be parsed.
 func (r *Reader) ReadAndValidateJSON[T any](req *http.Request) (*T, error) {
-	body, err := ReadJSONBody[T](req.Body, r.jsonOptions...)
+	body, err := ReadJSONBody[T](r.limitBody(req.Body), r.jsonOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +120,8 @@ func (r *Reader) ReadAndValidateJSON[T any](req *http.Request) (*T, error) {
 // ReadAndValidateForm reads form data into a T and validates it against the
 // struct tags. Fields are matched by their schema tag, falling back to json.
 func (r *Reader) ReadAndValidateForm[T any](req *http.Request) (*T, error) {
+	req.Body = r.limitBody(req.Body)
+
 	data, err := ReadFormData[T](req, r.decoder)
 	if err != nil {
 		return nil, err
@@ -185,6 +199,21 @@ func ReadFormData[T any](r *http.Request, d *schema.Decoder) (*T, error) {
 	}
 
 	return v, nil
+}
+
+// limitBody caps body at maxBodyBytes when WithMaxBodyBytes configured one.
+//
+// The ResponseWriter MaxBytesReader normally uses is nil here: it only exists
+// to mark a connection for closing once the limit is hit, which is the
+// caller's HTTP server's business, not this package's. Exceeding the cap
+// still surfaces cleanly as an *http.MaxBytesError, which parseReadError maps
+// to a 413.
+func (r *Reader) limitBody(body io.ReadCloser) io.ReadCloser {
+	if r.maxBodyBytes <= 0 {
+		return body
+	}
+
+	return http.MaxBytesReader(nil, body, r.maxBodyBytes)
 }
 
 func (r *Reader) validate(ctx context.Context, v any) error {
