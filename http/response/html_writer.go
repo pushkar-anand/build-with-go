@@ -46,8 +46,29 @@ func (hw *HTMLWriter) NotFound(w http.ResponseWriter, r *http.Request, templateN
 	hw.render(w, r, http.StatusNotFound, templateName, templateData)
 }
 
+// InternalServerError renders the given template with the given data with a 500 status.
 func (hw *HTMLWriter) InternalServerError(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
 	hw.render(w, r, http.StatusInternalServerError, templateName, templateData)
+}
+
+// BadRequest renders the given template with the given data with a 400 status.
+func (hw *HTMLWriter) BadRequest(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusBadRequest, templateName, templateData)
+}
+
+// Unauthorized renders the given template with the given data with a 401 status.
+func (hw *HTMLWriter) Unauthorized(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusUnauthorized, templateName, templateData)
+}
+
+// Forbidden renders the given template with the given data with a 403 status.
+func (hw *HTMLWriter) Forbidden(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusForbidden, templateName, templateData)
+}
+
+// Error renders the given template with the given data with the given status.
+func (hw *HTMLWriter) Error(w http.ResponseWriter, r *http.Request, status int, templateName string, templateData any) {
+	hw.render(w, r, status, templateName, templateData)
 }
 
 // render renders the given template with the given data with the given status.
