@@ -24,4 +24,8 @@ type (
 		logger           *slog.Logger
 		errProblemMapper func(error) Problem
 	}
+
+	HTMLWriter struct {
+		logger *slog.Logger
+	}
 )
