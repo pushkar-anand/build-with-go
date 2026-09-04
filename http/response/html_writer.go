@@ -89,12 +89,12 @@ func (hw *HTMLWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 // selects the page by its Status; an error handled by WithErrorStatusMapper
 // uses the status it returns; anything else renders the 500 page.
 func (hw *HTMLWriter) WriteError(w http.ResponseWriter, r *http.Request, err error) {
-	hw.renderError(w, r, hw.statusForError(err))
+	hw.renderError(w, r, err, hw.statusForError(err))
 }
 
 // ErrorPage renders the configured error page for status.
 func (hw *HTMLWriter) ErrorPage(w http.ResponseWriter, r *http.Request, status int) {
-	hw.renderError(w, r, status)
+	hw.renderError(w, r, nil, status)
 }
 
 func (hw *HTMLWriter) statusForError(err error) int {
@@ -111,7 +111,7 @@ func (hw *HTMLWriter) statusForError(err error) int {
 	return http.StatusInternalServerError
 }
 
-func (hw *HTMLWriter) renderError(w http.ResponseWriter, r *http.Request, status int) {
+func (hw *HTMLWriter) renderError(w http.ResponseWriter, r *http.Request, err error, status int) {
 	tmpl, present := hw.errorTemplates[status]
 	if !present {
 		hw.logger.ErrorContext(
@@ -125,10 +125,24 @@ func (hw *HTMLWriter) renderError(w http.ResponseWriter, r *http.Request, status
 	}
 	w.Header().Set("Cache-Control", "no-store")
 
-	hw.render(w, r, status, tmpl, ErrorPageData{
-		Status: status,
-		Title:  http.StatusText(status),
-	})
+	if hw.errDataFunc == nil {
+		hw.render(w, r, status, tmpl, ErrorPageData{
+			Status: status,
+			Title:  http.StatusText(status),
+		})
+		return
+	}
+
+	data := map[string]any{
+		"Status": status,
+		"Title":  http.StatusText(status),
+	}
+
+	for k, v := range hw.errDataFunc(r, err, status) {
+		data[k] = v
+	}
+
+	hw.render(w, r, status, tmpl, data)
 }
 
 // render renders the given template with the given data with the given status.

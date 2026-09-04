@@ -19,6 +19,7 @@ func errorPages(t *testing.T) *template.Template {
 	root := template.New("root")
 	template.Must(root.New("errors/not-found").Parse(`<h1>{{.Status}}</h1><p>{{.Title}}</p>`))
 	template.Must(root.New("errors/server-error").Parse(`<h1>Error {{.Status}}</h1>`))
+	template.Must(root.New("errors/with-support").Parse(`<h1>{{.Status}}</h1><p>{{.SupportEmail}}</p>`))
 
 	return root
 }
@@ -113,6 +114,26 @@ func TestHTMLWriter_WriteError(t *testing.T) {
 			assert.Equal(t, tt.wantBody, w.Body.String())
 		})
 	}
+}
+
+func TestHTMLWriter_WithErrorDataFunc(t *testing.T) {
+	t.Parallel()
+
+	dataFunc := WithErrorDataFunc(func(r *http.Request, err error, status int) map[string]any {
+		return map[string]any{"SupportEmail": "help@example.test"}
+	})
+
+	pages := WithErrorTemplates(map[int]string{
+		http.StatusNotFound: "errors/with-support",
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/x", nil)
+
+	newHTMLWriter(t, pages, dataFunc).WriteError(w, r, &domainProblem{status: http.StatusNotFound, detail: "gone"})
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, "<h1>404</h1><p>help@example.test</p>", w.Body.String())
 }
 
 func TestHTMLWriter_ErrorPage(t *testing.T) {

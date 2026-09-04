@@ -31,5 +31,6 @@ type (
 		templates       *template.Template
 		errorTemplates  map[int]string
 		errStatusMapper func(error) int
+		errDataFunc     func(r *http.Request, err error, status int) map[string]any
 	}
 )
