@@ -36,6 +36,13 @@ func NewHTMLWriter(
 	return hw
 }
 
+// WithTemplates sets the templates to be used by the writer.
+// It will overwrite any previously set templates.
+func (hw *HTMLWriter) WithTemplates(tmpl *template.Template) *HTMLWriter {
+	hw.templates = tmpl
+	return hw
+}
+
 // HTML returns a [http.HandlerFunc] that renders the given template with the given data.
 // It is a shortcut for Success.
 func (hw *HTMLWriter) HTML(tmpl string, data any) http.HandlerFunc {
@@ -121,6 +128,16 @@ func (hw *HTMLWriter) renderError(w http.ResponseWriter, r *http.Request, status
 
 // render renders the given template with the given data with the given status.
 func (hw *HTMLWriter) render(w http.ResponseWriter, r *http.Request, status int, templateName string, templateData any) {
+	if hw.templates == nil {
+		hw.logger.ErrorContext(
+			r.Context(),
+			"no templates configured",
+		)
+
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	// Rendered to a buffer first, so a template that fails halfway through
 	// cannot leave half a page followed by an error, and so the status is not
 	// yet written when it does.
