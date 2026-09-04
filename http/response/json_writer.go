@@ -15,6 +15,12 @@ func NewJSONWriter(
 	l *slog.Logger,
 	opts ...Option,
 ) *JSONWriter {
+	if l == nil {
+		l = slog.Default()
+	}
+
+	l = l.With(slog.String("writer", "JSONWriter"))
+
 	jw := &JSONWriter{
 		logger: l,
 	}
