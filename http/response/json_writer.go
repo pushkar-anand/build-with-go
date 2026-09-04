@@ -85,6 +85,7 @@ func (h *JSONWriter) writeJSON(
 func (h *JSONWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := handler(w, r); err != nil {
+			h.logger.ErrorContext(r.Context(), "handler failed", logger.Err(err))
 			h.WriteError(w, r, err)
 		}
 	}
