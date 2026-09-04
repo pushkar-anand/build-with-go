@@ -9,6 +9,7 @@ import (
 	"github.com/pushkar-anand/build-with-go/logger"
 )
 
+// NewHTMLWriter returns an HTMLWriter.
 func NewHTMLWriter(
 	l *slog.Logger,
 	tmpl *template.Template,
@@ -27,16 +28,29 @@ func NewHTMLWriter(
 	}
 }
 
+// HTML returns a [http.HandlerFunc] that renders the given template with the given data.
+// It is a shortcut for Success.
 func (hw *HTMLWriter) HTML(tmpl string, data any) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		hw.Success(w, r, tmpl, data)
 	}
 }
 
+// Success renders the given template with the given data with a 200 status.
 func (hw *HTMLWriter) Success(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
 	hw.render(w, r, http.StatusOK, templateName, templateData)
 }
 
+// NotFound renders the given template with the given data with a 404 status.
+func (hw *HTMLWriter) NotFound(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusNotFound, templateName, templateData)
+}
+
+func (hw *HTMLWriter) InternalServerError(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusInternalServerError, templateName, templateData)
+}
+
+// render renders the given template with the given data with the given status.
 func (hw *HTMLWriter) render(w http.ResponseWriter, r *http.Request, status int, templateName string, templateData any) {
 	// Rendered to a buffer first, so a template that fails halfway through
 	// cannot leave half a page followed by an error, and so the status is not
