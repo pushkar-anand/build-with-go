@@ -112,8 +112,7 @@ func (h *JSONWriter) HandleJSON[T any](fn func(r *http.Request) (T, error)) http
 //
 // Anything else falls to the configured mapper, then to a generic 500.
 func (h *JSONWriter) getMappedProblem(ctx context.Context, err error) Problem {
-	var problem Problem
-	if errors.As(err, &problem) {
+	if problem, ok := errors.AsType[Problem](err); ok {
 		return problem
 	}
 
