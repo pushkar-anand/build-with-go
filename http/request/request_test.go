@@ -136,6 +136,59 @@ func TestReader_WithRejectUnknownFields(t *testing.T) {
 	assert.Equal(t, `Request body contains unknown field "nope"`, readErr.Message)
 }
 
+func TestReader_WithMaxBodyBytes(t *testing.T) {
+	t.Parallel()
+
+	v, err := validatorpkg.New()
+	require.NoError(t, err)
+
+	r := NewReader(slog.New(slog.DiscardHandler), v, WithMaxBodyBytes(16))
+
+	t.Run("JSON body over the cap", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/posts",
+			strings.NewReader(`{"title":"a title well past sixteen bytes"}`))
+
+		_, err := r.ReadAndValidateJSON[createPost](req)
+
+		var readErr *ReadError
+		require.ErrorAs(t, err, &readErr)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, readErr.HTTPStatusCode)
+	})
+
+	t.Run("JSON body within the cap", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/posts", strings.NewReader(`{"title":"abc"}`))
+
+		got, err := r.ReadAndValidateJSON[createPost](req)
+
+		require.NoError(t, err)
+		assert.Equal(t, "abc", got.Title)
+	})
+
+	t.Run("form body over the cap", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/posts",
+			strings.NewReader("title=a+title+well+past+sixteen+bytes"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+		_, err := r.ReadAndValidateForm[createPost](req)
+
+		var readErr *ReadError
+		require.ErrorAs(t, err, &readErr)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, readErr.HTTPStatusCode)
+	})
+
+	t.Run("zero leaves the body unbounded", func(t *testing.T) {
+		unbounded := NewReader(slog.New(slog.DiscardHandler), v)
+
+		req := httptest.NewRequest(http.MethodPost, "/posts",
+			strings.NewReader(`{"title":"a title well past sixteen bytes"}`))
+
+		got, err := unbounded.ReadAndValidateJSON[createPost](req)
+
+		require.NoError(t, err)
+		assert.Equal(t, "a title well past sixteen bytes", got.Title)
+	})
+}
+
 // A type carrying its own Valid method is validated by it, so rules spanning
 // several fields need no struct tag.
 type dateRange struct {
