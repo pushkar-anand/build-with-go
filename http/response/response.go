@@ -7,6 +7,7 @@
 package response
 
 import (
+	"html/template"
 	"log/slog"
 	"net/http"
 )
@@ -26,6 +27,7 @@ type (
 	}
 
 	HTMLWriter struct {
-		logger *slog.Logger
+		logger    *slog.Logger
+		templates *template.Template
 	}
 )

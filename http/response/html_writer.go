@@ -1,11 +1,72 @@
 package response
 
-import "log/slog"
+import (
+	"bytes"
+	"html/template"
+	"log/slog"
+	"net/http"
+
+	"github.com/pushkar-anand/build-with-go/logger"
+)
 
 func NewHTMLWriter(
 	l *slog.Logger,
+	tmpl *template.Template,
 ) *HTMLWriter {
+	if l == nil {
+		l = slog.Default()
+	}
+
+	l = l.With(
+		slog.String("writer", "HTMLWriter"),
+	)
+
 	return &HTMLWriter{
-		logger: l,
+		logger:    l,
+		templates: tmpl,
+	}
+}
+
+func (hw *HTMLWriter) HTML(tmpl string, data any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		hw.Success(w, r, tmpl, data)
+	}
+}
+
+func (hw *HTMLWriter) Success(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
+	hw.render(w, r, http.StatusOK, templateName, templateData)
+}
+
+func (hw *HTMLWriter) render(w http.ResponseWriter, r *http.Request, status int, templateName string, templateData any) {
+	// Rendered to a buffer first, so a template that fails halfway through
+	// cannot leave half a page followed by an error, and so the status is not
+	// yet written when it does.
+	var buf bytes.Buffer
+
+	err := hw.templates.ExecuteTemplate(&buf, templateName, templateData)
+	if err != nil {
+		hw.logger.ErrorContext(
+			r.Context(),
+			"error rendering template",
+			logger.Err(err),
+			slog.String("template", templateName),
+		)
+
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		hw.logger.ErrorContext(
+			r.Context(),
+			"error writing html to client",
+			logger.Err(err),
+			slog.String("template", templateName),
+		)
 	}
 }
