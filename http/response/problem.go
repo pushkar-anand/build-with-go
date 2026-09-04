@@ -8,6 +8,8 @@ import (
 
 type (
 	Problem interface {
+		error
+
 		Type() string
 		Title() string
 		Status() int
@@ -90,6 +92,12 @@ func (pb *ProblemBuilder) Build() Problem {
 		problemDetail: pb.problemDetail,
 		customMembers: pb.customMembers,
 	}
+}
+
+// Error implements error, returning the detail so a Problem built here can be
+// returned as an error from a handler and still be recognised as a Problem.
+func (cp *customProblem) Error() string {
+	return cp.problemDetail
 }
 
 // Type implements Problem, returning the problem type URI.
