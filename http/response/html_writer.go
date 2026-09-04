@@ -75,6 +75,11 @@ type ErrorPageData struct {
 func (hw *HTMLWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := handler(w, r); err != nil {
+			hw.logger.ErrorContext(
+				r.Context(), "handler failed",
+				logger.Err(err),
+			)
+
 			hw.WriteError(w, r, err)
 		}
 	}
