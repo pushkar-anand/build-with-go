@@ -2,6 +2,7 @@ package response
 
 import (
 	"bytes"
+	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 func NewHTMLWriter(
 	l *slog.Logger,
 	tmpl *template.Template,
+	opts ...HTMLOption,
 ) *HTMLWriter {
 	if l == nil {
 		l = slog.Default()
@@ -22,10 +24,16 @@ func NewHTMLWriter(
 		slog.String("writer", "HTMLWriter"),
 	)
 
-	return &HTMLWriter{
+	hw := &HTMLWriter{
 		logger:    l,
 		templates: tmpl,
 	}
+
+	for _, opt := range opts {
+		opt.applyHTML(hw)
+	}
+
+	return hw
 }
 
 // HTML returns a [http.HandlerFunc] that renders the given template with the given data.
@@ -41,34 +49,74 @@ func (hw *HTMLWriter) Success(w http.ResponseWriter, r *http.Request, templateNa
 	hw.render(w, r, http.StatusOK, templateName, templateData)
 }
 
-// NotFound renders the given template with the given data with a 404 status.
-func (hw *HTMLWriter) NotFound(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
-	hw.render(w, r, http.StatusNotFound, templateName, templateData)
-}
-
-// InternalServerError renders the given template with the given data with a 500 status.
-func (hw *HTMLWriter) InternalServerError(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
-	hw.render(w, r, http.StatusInternalServerError, templateName, templateData)
-}
-
-// BadRequest renders the given template with the given data with a 400 status.
-func (hw *HTMLWriter) BadRequest(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
-	hw.render(w, r, http.StatusBadRequest, templateName, templateData)
-}
-
-// Unauthorized renders the given template with the given data with a 401 status.
-func (hw *HTMLWriter) Unauthorized(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
-	hw.render(w, r, http.StatusUnauthorized, templateName, templateData)
-}
-
-// Forbidden renders the given template with the given data with a 403 status.
-func (hw *HTMLWriter) Forbidden(w http.ResponseWriter, r *http.Request, templateName string, templateData any) {
-	hw.render(w, r, http.StatusForbidden, templateName, templateData)
-}
-
 // Error renders the given template with the given data with the given status.
 func (hw *HTMLWriter) Error(w http.ResponseWriter, r *http.Request, status int, templateName string, templateData any) {
 	hw.render(w, r, status, templateName, templateData)
+}
+
+// ErrorPageData is the data passed to an error-page template. It carries only
+// what is safe to show a visitor: the status code and its text. Problem
+// details, error messages, and instance URIs stay in the logs and in JSON
+// responses; they are not part of an HTML error page.
+type ErrorPageData struct {
+	Status int
+	Title  string
+}
+
+// Handle adapts a HandlerFunc to an http.HandlerFunc, rendering the error page
+// for any error the handler returns.
+func (hw *HTMLWriter) Handle(handler HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := handler(w, r); err != nil {
+			hw.WriteError(w, r, err)
+		}
+	}
+}
+
+// WriteError renders the error page for err. An error implementing Problem
+// selects the page by its Status; an error handled by WithErrorStatusMapper
+// uses the status it returns; anything else renders the 500 page.
+func (hw *HTMLWriter) WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	hw.renderError(w, r, hw.statusForError(err))
+}
+
+// ErrorPage renders the configured error page for status.
+func (hw *HTMLWriter) ErrorPage(w http.ResponseWriter, r *http.Request, status int) {
+	hw.renderError(w, r, status)
+}
+
+func (hw *HTMLWriter) statusForError(err error) int {
+	if problem, ok := errors.AsType[Problem](err); ok {
+		return problem.Status()
+	}
+
+	if hw.errStatusMapper != nil {
+		if status := hw.errStatusMapper(err); status != 0 {
+			return status
+		}
+	}
+
+	return http.StatusInternalServerError
+}
+
+func (hw *HTMLWriter) renderError(w http.ResponseWriter, r *http.Request, status int) {
+	tmpl, present := hw.errorTemplates[status]
+	if !present {
+		hw.logger.ErrorContext(
+			r.Context(),
+			"no error template for status",
+			slog.Int("status", status),
+		)
+
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+
+	hw.render(w, r, status, tmpl, ErrorPageData{
+		Status: status,
+		Title:  http.StatusText(status),
+	})
 }
 
 // render renders the given template with the given data with the given status.

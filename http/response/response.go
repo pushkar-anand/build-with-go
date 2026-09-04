@@ -27,7 +27,9 @@ type (
 	}
 
 	HTMLWriter struct {
-		logger    *slog.Logger
-		templates *template.Template
+		logger          *slog.Logger
+		templates       *template.Template
+		errorTemplates  map[int]string
+		errStatusMapper func(error) int
 	}
 )
