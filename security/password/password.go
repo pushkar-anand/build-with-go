@@ -18,6 +18,8 @@ const hashFormat = "$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s"
 
 const version = argon2.Version
 
+// Argon2id parameters sized for strong resistance to offline brute-forcing;
+// raising any of them costs more CPU and memory per hash.
 const (
 	defaultTime        = 4
 	defaultMemory      = 64 * 1024
@@ -25,6 +27,41 @@ const (
 	defaultSaltLength  = 16
 	defaultKeyLength   = 32
 )
+
+// Compare derives a key using whatever memory, time, parallelism and key
+// length the hash string itself claims, so an attacker-controlled or
+// corrupted hash could otherwise force it to allocate excessive memory or
+// spend excessive CPU per verification attempt. The bounds below cap that.
+const (
+	// maxEncodedHashLength rejects an oversized hash string before parsing.
+	maxEncodedHashLength = 512
+
+	// maxHashCostMultiplier caps a hash's cost relative to the calling
+	// Hasher's own configuration -- a fixed ceiling alone could still be far
+	// more than a resource-constrained deployment ever intends to spend on
+	// one verification.
+	maxHashCostMultiplier = 2
+
+	maxHashMemory      = 1 << 20 // 1 GiB, in KiB
+	maxHashTime        = 64
+	maxHashParallelism = 64
+	maxHashKeyLength   = 128 // bytes
+)
+
+// costCeiling returns the tighter of configured*maxHashCostMultiplier and
+// absoluteMax. configured is 0 only if an Option was misused, in which case
+// it falls back to the absolute ceiling alone.
+func costCeiling(configured, absoluteMax uint64) uint64 {
+	if configured == 0 {
+		return absoluteMax
+	}
+
+	if relative := configured * maxHashCostMultiplier; relative < absoluteMax {
+		return relative
+	}
+
+	return absoluteMax
+}
 
 // Hasher is a password hasher
 type Hasher struct {
@@ -83,6 +120,10 @@ func (h *Hasher) Hash(password string) (string, error) {
 func (h *Hasher) Compare(
 	password, hash string,
 ) error {
+	if len(hash) > maxEncodedHashLength {
+		return ErrInvalidHashFormat
+	}
+
 	split := strings.Split(hash, "$")
 	if len(split) != 6 {
 		return ErrInvalidHashFormat
@@ -111,6 +152,12 @@ func (h *Hasher) Compare(
 		return ErrInvalidHashFormat
 	}
 
+	if _memory == 0 || uint64(_memory) > costCeiling(uint64(h.memory), maxHashMemory) ||
+		_time == 0 || uint64(_time) > costCeiling(uint64(h.time), maxHashTime) ||
+		_parallelism == 0 || uint64(_parallelism) > costCeiling(uint64(h.parallelism), maxHashParallelism) {
+		return ErrHashParamsOutOfRange
+	}
+
 	salt, err := base64.RawStdEncoding.DecodeString(split[4])
 	if err != nil {
 		return ErrInvalidHashFormat
@@ -127,6 +174,9 @@ func (h *Hasher) Compare(
 	defer eraseBuf(key)
 
 	_keyLen := uint32(len(key))
+	if _keyLen == 0 || uint64(_keyLen) > costCeiling(uint64(h.keyLength), maxHashKeyLength) {
+		return ErrHashParamsOutOfRange
+	}
 
 	derivedKey := argon2.IDKey([]byte(password), fsalt, _time, _memory, _parallelism, _keyLen)
 	defer eraseBuf(derivedKey)
