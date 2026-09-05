@@ -16,16 +16,14 @@ const MaxRFC9106PasswdLen int = (2 << 31) - 1
 // hashFormat is the format of the argon2id hash.
 const hashFormat = "$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s"
 
-const (
-	version    = argon2.Version
-	saltLength = 16
-	keyLength  = 64
-)
+const version = argon2.Version
 
 const (
 	defaultTime        = 4
 	defaultMemory      = 64 * 1024
 	defaultParallelism = 2
+	defaultSaltLength  = 16
+	defaultKeyLength   = 32
 )
 
 // Hasher is a password hasher
@@ -35,33 +33,22 @@ type Hasher struct {
 	parallelism                         uint8
 }
 
-// NewHasher returns a new Hasher
-// with sensible defaults is none are provided
-func NewHasher(
-	memory, time uint32,
-	parallelism uint8,
-	pepper string,
-) *Hasher {
-	if memory == 0 {
-		memory = defaultMemory
+// NewHasher returns a new Hasher configured with sensible defaults,
+// overridden by any options provided.
+func NewHasher(opts ...Option) *Hasher {
+	h := &Hasher{
+		time:        defaultTime,
+		memory:      defaultMemory,
+		parallelism: defaultParallelism,
+		saltLength:  defaultSaltLength,
+		keyLength:   defaultKeyLength,
 	}
 
-	if time == 0 {
-		time = defaultTime
+	for _, opt := range opts {
+		opt.apply(h)
 	}
 
-	if parallelism == 0 {
-		parallelism = defaultParallelism
-	}
-
-	return &Hasher{
-		pepper:      pepper,
-		time:        time,
-		memory:      memory,
-		saltLength:  saltLength,
-		parallelism: parallelism,
-		keyLength:   keyLength,
-	}
+	return h
 }
 
 // Hash generates a secure hash of the given password
@@ -70,7 +57,7 @@ func (h *Hasher) Hash(password string) (string, error) {
 		return "", ErrPasswordTooLong
 	}
 
-	salt, err := generateRandomBytes(saltLength)
+	salt, err := generateRandomBytes(h.saltLength)
 	if err != nil {
 		return "", fmt.Errorf("generating salt: %w", err)
 	}
@@ -79,12 +66,12 @@ func (h *Hasher) Hash(password string) (string, error) {
 	fsalt := append(salt, h.pepper...)
 	defer eraseBuf(fsalt)
 
-	key := argon2.IDKey([]byte(password), fsalt, h.time, h.memory, h.parallelism, keyLength)
+	key := argon2.IDKey([]byte(password), fsalt, h.time, h.memory, h.parallelism, h.keyLength)
 	defer eraseBuf(key)
 
 	hash := fmt.Sprintf(
 		hashFormat,
-		version, h.memory, defaultTime, h.parallelism,
+		version, h.memory, h.time, h.parallelism,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(key),
 	)

@@ -10,7 +10,7 @@ func TestHashAndCompare(t *testing.T) {
 	t.Parallel()
 
 	t.Run("same password", func(t *testing.T) {
-		h := NewHasher(0, 0, 0, "jsjfij390xm9")
+		h := NewHasher(WithPepper("jsjfij390xm9"))
 		p := "sjfyew8fAdw8e9ww"
 
 		hash, err := h.Hash(p)
