@@ -74,9 +74,9 @@ func TestJSONWriter_WriteError(t *testing.T) {
 			wantBody:   outOfStockBody,
 		},
 		{
-			name:       "a Problem takes precedence over the mapper",
+			name:       "a nil mapper result falls back to the Problem",
 			err:        outOfStock,
-			opts:       []Option{WithErrorProblemMapper(func(error) Problem { return teapot() })},
+			opts:       []Option{WithErrorProblemMapper(func(error) Problem { return nil })},
 			wantStatus: http.StatusConflict,
 			wantBody:   outOfStockBody,
 		},

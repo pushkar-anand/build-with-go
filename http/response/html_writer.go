@@ -97,14 +97,14 @@ func (hw *HTMLWriter) ErrorPage(w http.ResponseWriter, r *http.Request, status i
 }
 
 func (hw *HTMLWriter) statusForError(err error) int {
-	if problem, ok := errors.AsType[Problem](err); ok {
-		return problem.Status()
-	}
-
 	if hw.errStatusMapper != nil {
 		if status := hw.errStatusMapper(err); status != 0 {
 			return status
 		}
+	}
+
+	if problem, ok := errors.AsType[Problem](err); ok {
+		return problem.Status()
 	}
 
 	return http.StatusInternalServerError

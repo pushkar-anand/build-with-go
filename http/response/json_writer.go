@@ -110,28 +110,17 @@ func (h *JSONWriter) HandleJSON[T any](fn func(r *http.Request) (T, error)) http
 	}
 }
 
-// getMappedProblem resolves err to the Problem describing the response.
-//
-// An error that implements Problem already describes itself, so it is used as
-// it is. That covers request.ReadError and request.ValidationError without this
-// package having to know those types, and lets callers give their own domain
-// errors a response without configuring a mapper at all.
-//
-// Anything else falls to the configured mapper, then to a generic 500.
+// getMappedProblem prefers an explicit mapper, then the error's own Problem,
+// then a generic 500. A nil mapper result allows the defaults to apply.
 func (h *JSONWriter) getMappedProblem(ctx context.Context, err error) Problem {
+	if h.errProblemMapper != nil {
+		if p := h.errProblemMapper(err); p != nil {
+			return p
+		}
+	}
 	if problem, ok := errors.AsType[Problem](err); ok {
 		return problem
 	}
-
-	if h.errProblemMapper == nil {
-		h.logger.ErrorContext(ctx, "failed to handle request", logger.Err(err))
-		return defaultProblem
-	}
-
-	p := h.errProblemMapper(err)
-	if p == nil {
-		return defaultProblem
-	}
-
-	return p
+	h.logger.ErrorContext(ctx, "failed to handle request", logger.Err(err))
+	return defaultProblem
 }
