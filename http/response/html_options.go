@@ -23,10 +23,9 @@ func WithErrorTemplates(byStatus map[int]string) HTMLOption {
 	})
 }
 
-// WithErrorStatusMapper sets how errors that do not implement Problem are
-// mapped to a status code, and so to an error page. Returning zero falls back
-// to 500. Errors implementing Problem carry their own status and never reach
-// the mapper.
+// WithErrorStatusMapper overrides the status for any error, including errors
+// implementing Problem. Returning zero uses the error's Problem status if present,
+// otherwise 500.
 func WithErrorStatusMapper(fn func(err error) int) HTMLOption {
 	return htmlOptionFunc(func(hw *HTMLWriter) {
 		hw.errStatusMapper = fn

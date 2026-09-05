@@ -12,9 +12,9 @@ func (fn optionFunc) apply(h *JSONWriter) {
 	fn(h)
 }
 
-// WithErrorProblemMapper sets how errors that do not implement Problem are
-// turned into one. Errors that do implement it describe themselves and never
-// reach the mapper. Returning nil falls back to a generic 500.
+// WithErrorProblemMapper overrides the default response for any error, including
+// errors implementing Problem. Returning nil uses the error's Problem if present,
+// otherwise a generic 500.
 func WithErrorProblemMapper(fn func(err error) Problem) Option {
 	return optionFunc(func(h *JSONWriter) {
 		h.errProblemMapper = fn

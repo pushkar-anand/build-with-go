@@ -85,9 +85,8 @@ func (hw *HTMLWriter) Handle(handler HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// WriteError renders the error page for err. An error implementing Problem
-// selects the page by its Status; an error handled by WithErrorStatusMapper
-// uses the status it returns; anything else renders the 500 page.
+// WriteError renders the error page using the configured status mapper first,
+// then the error's Problem status, then 500.
 func (hw *HTMLWriter) WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	hw.renderError(w, r, err, hw.statusForError(err))
 }

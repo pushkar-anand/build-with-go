@@ -2,8 +2,8 @@
 // problem documents.
 //
 // Handlers report failure by returning an error rather than writing one. Any
-// error implementing Problem describes its own response; anything else goes
-// through the mapper given to WithErrorProblemMapper, and then to a generic 500.
+// configured mapper gets first choice; otherwise an error implementing Problem
+// describes its own response, with a generic 500 for other errors.
 package response
 
 import (
