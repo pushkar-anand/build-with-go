@@ -119,6 +119,11 @@ func (s *Session[T]) Status(ctx context.Context) scs.Status {
 	return s.manager.Status(ctx)
 }
 
+// Manager returns the session manager used by this session.
+func (s *Session[T]) Manager() *scs.SessionManager {
+	return s.manager
+}
+
 var (
 	registerMu sync.Mutex
 	registered = map[reflect.Type]struct{}{}
