@@ -3,6 +3,7 @@ module github.com/pushkar-anand/build-with-go
 go 1.27.0
 
 require (
+	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/go-playground/validator/v10 v10.30.4
 	github.com/gorilla/schema v1.4.1
 	github.com/knadh/koanf/parsers/yaml v1.1.1
