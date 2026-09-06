@@ -45,10 +45,7 @@ type Session[T any] struct {
 	core
 }
 
-// New returns a Session whose document is a T, with the package defaults,
-// overridden by any options. T is registered for the default gob codec, so a
-// T of your own -- struct, pointer, whatever -- survives a round trip without
-// extra ceremony.
+// New returns a Session whose document is a T
 func New[T any](opts ...Option) *Session[T] {
 	registerType[T]()
 
