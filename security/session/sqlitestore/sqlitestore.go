@@ -4,7 +4,9 @@
 // It imports no driver, so any SQLite driver works -- including the CGo-free
 // modernc.org/sqlite.
 //
-// The caller owns the schema. Create this table and index before calling New:
+// The caller owns the schema. Create the table and its index before building a
+// store; the columns are fixed, the name is Config.TableName (default
+// "sessions"):
 //
 //	CREATE TABLE sessions (
 //	    token  TEXT    PRIMARY KEY,
@@ -19,24 +21,53 @@
 package sqlitestore
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/pushkar-anand/build-with-go/logger"
 )
 
-// defaultCleanupInterval bounds how long an expired row sits in the table.
-// Find already refuses to serve one, so the sweep is only about disk space.
-const defaultCleanupInterval = 5 * time.Minute
+const (
+	// defaultCleanupInterval bounds how long an expired row sits in the table.
+	// Find already refuses to serve one, so the sweep is only about disk space.
+	defaultCleanupInterval = 5 * time.Minute
+
+	defaultTableName = "sessions"
+)
+
+// tableName must be a bare identifier: the store interpolates it into every
+// statement, so a value that could carry SQL is refused rather than escaped.
+var tableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// Config is the input to NewWithConfig. Its zero value is valid and matches
+// what New does: the "sessions" table, swept every five minutes.
+type Config struct {
+	// TableName is the table the store reads and writes. Empty means "sessions".
+	TableName string
+
+	// CleanupInterval is how often the background goroutine deletes expired
+	// rows. Zero selects the five-minute default; a negative value turns the
+	// sweep off, leaving cleanup to the caller or to Find's own per-read check.
+	CleanupInterval time.Duration
+}
 
 // SQLiteStore is an [scs.Store] backed by a SQLite table.
 type SQLiteStore struct {
 	db          *sql.DB
 	stopCleanup chan bool
+
+	findQuery   string
+	commitQuery string
+	deleteQuery string
+	allQuery    string
+	sweepQuery  string
 }
 
 // CtxStore, not just Store: scs then passes the request context down to each
@@ -52,18 +83,45 @@ var (
 // every five minutes. Call StopCleanup to end that goroutine once the store is
 // done with; a process-lifetime server never has to.
 func New(db *sql.DB) *SQLiteStore {
-	return NewWithCleanupInterval(db, defaultCleanupInterval)
+	return newStore(db, defaultTableName, defaultCleanupInterval)
 }
 
 // NewWithCleanupInterval returns a store over db, sweeping expired rows every
-// interval. A zero or negative interval starts no goroutine, leaving cleanup to
-// the caller or to Find's own per-read check.
+// interval. A zero or negative interval starts no goroutine.
 func NewWithCleanupInterval(db *sql.DB, interval time.Duration) *SQLiteStore {
-	s := &SQLiteStore{db: db}
+	return newStore(db, defaultTableName, interval)
+}
 
-	if interval > 0 {
+// NewWithConfig returns a store configured by cfg. It errors only when
+// cfg.TableName is set to something other than a bare SQL identifier.
+func NewWithConfig(db *sql.DB, cfg Config) (*SQLiteStore, error) {
+	table := cmp.Or(cfg.TableName, defaultTableName)
+	if !tableName.MatchString(table) {
+		return nil, fmt.Errorf("sqlitestore: table name %q is not a bare SQL identifier", cfg.TableName)
+	}
+
+	interval := cfg.CleanupInterval
+	if interval == 0 {
+		interval = defaultCleanupInterval
+	}
+
+	return newStore(db, table, interval), nil
+}
+
+func newStore(db *sql.DB, table string, cleanupInterval time.Duration) *SQLiteStore {
+	s := &SQLiteStore{
+		db:        db,
+		findQuery: fmt.Sprintf(`SELECT data FROM %s WHERE token = ? AND expiry > ?`, table),
+		commitQuery: fmt.Sprintf(`INSERT INTO %s (token, data, expiry) VALUES (?, ?, ?) `+
+			`ON CONFLICT (token) DO UPDATE SET data = excluded.data, expiry = excluded.expiry`, table),
+		deleteQuery: fmt.Sprintf(`DELETE FROM %s WHERE token = ?`, table),
+		allQuery:    fmt.Sprintf(`SELECT token, data FROM %s WHERE expiry > ?`, table),
+		sweepQuery:  fmt.Sprintf(`DELETE FROM %s WHERE expiry <= ?`, table),
+	}
+
+	if cleanupInterval > 0 {
 		s.stopCleanup = make(chan bool)
-		go s.startCleanup(interval)
+		go s.startCleanup(cleanupInterval)
 	}
 
 	return s
@@ -78,11 +136,7 @@ func (s *SQLiteStore) Find(token string) (b []byte, found bool, err error) {
 
 // FindCtx is Find with a caller-supplied context.
 func (s *SQLiteStore) FindCtx(ctx context.Context, token string) (b []byte, found bool, err error) {
-	err = s.db.QueryRowContext(
-		ctx,
-		"SELECT data FROM sessions WHERE token = ? AND expiry > ?",
-		token, time.Now().UnixNano(),
-	).Scan(&b)
+	err = s.db.QueryRowContext(ctx, s.findQuery, token, time.Now().UnixNano()).Scan(&b)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -102,12 +156,7 @@ func (s *SQLiteStore) Commit(token string, b []byte, expiry time.Time) error {
 
 // CommitCtx is Commit with a caller-supplied context.
 func (s *SQLiteStore) CommitCtx(ctx context.Context, token string, b []byte, expiry time.Time) error {
-	_, err := s.db.ExecContext(
-		ctx,
-		`INSERT INTO sessions (token, data, expiry) VALUES (?, ?, ?)
-			ON CONFLICT (token) DO UPDATE SET data = excluded.data, expiry = excluded.expiry`,
-		token, b, expiry.UnixNano(),
-	)
+	_, err := s.db.ExecContext(ctx, s.commitQuery, token, b, expiry.UnixNano())
 
 	return err
 }
@@ -119,7 +168,7 @@ func (s *SQLiteStore) Delete(token string) error {
 
 // DeleteCtx is Delete with a caller-supplied context.
 func (s *SQLiteStore) DeleteCtx(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE token = ?", token)
+	_, err := s.db.ExecContext(ctx, s.deleteQuery, token)
 
 	return err
 }
@@ -132,11 +181,7 @@ func (s *SQLiteStore) All() (map[string][]byte, error) {
 
 // AllCtx is All with a caller-supplied context.
 func (s *SQLiteStore) AllCtx(ctx context.Context) (map[string][]byte, error) {
-	rows, err := s.db.QueryContext(
-		ctx,
-		"SELECT token, data FROM sessions WHERE expiry > ?",
-		time.Now().UnixNano(),
-	)
+	rows, err := s.db.QueryContext(ctx, s.allQuery, time.Now().UnixNano())
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +231,7 @@ func (s *SQLiteStore) startCleanup(interval time.Duration) {
 }
 
 func (s *SQLiteStore) deleteExpired() error {
-	_, err := s.db.Exec("DELETE FROM sessions WHERE expiry <= ?", time.Now().UnixNano())
+	_, err := s.db.Exec(s.sweepQuery, time.Now().UnixNano())
 
 	return err
 }

@@ -3,6 +3,7 @@ package sqlitestore_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -14,9 +15,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// newDB returns a migrated, test-scoped database with the schema the store
-// documents.
+// newDB returns a test-scoped database holding the default "sessions" table.
 func newDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	return newNamedDB(t, "sessions")
+}
+
+// newNamedDB is newDB with the store's schema under an arbitrary table name.
+func newNamedDB(t *testing.T, table string) *sql.DB {
 	t.Helper()
 
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "sessions.db"))
@@ -24,12 +31,12 @@ func newDB(t *testing.T) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 
 	for _, stmt := range []string{
-		`CREATE TABLE sessions (
+		fmt.Sprintf(`CREATE TABLE %s (
 			token  TEXT    PRIMARY KEY,
 			data   BLOB    NOT NULL,
 			expiry INTEGER NOT NULL
-		)`,
-		`CREATE INDEX sessions_expiry_idx ON sessions (expiry)`,
+		)`, table),
+		fmt.Sprintf(`CREATE INDEX %s_expiry_idx ON %s (expiry)`, table, table),
 	} {
 		_, err = db.Exec(stmt)
 		require.NoError(t, err)
@@ -167,6 +174,48 @@ func TestAllOnEmptyTable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, all)
 	assert.NotNil(t, all)
+}
+
+func TestNewWithConfigUsesTheNamedTable(t *testing.T) {
+	t.Parallel()
+
+	db := newNamedDB(t, "app_sessions")
+
+	s, err := sqlitestore.NewWithConfig(db, sqlitestore.Config{
+		TableName:       "app_sessions",
+		CleanupInterval: -1,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, s.Commit("token-a", []byte("payload"), time.Now().Add(time.Hour)))
+
+	b, found, err := s.Find("token-a")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, []byte("payload"), b)
+}
+
+func TestNewWithConfigRejectsAnUnsafeTableName(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"a b", "a;drop", "a-b", "1abc", `"quoted"`, "s)", "sessions;--"} {
+		_, err := sqlitestore.NewWithConfig(nil, sqlitestore.Config{TableName: name})
+		assert.Errorf(t, err, "table name %q should be refused", name)
+	}
+}
+
+func TestNewWithConfigZeroValueMatchesNew(t *testing.T) {
+	t.Parallel()
+
+	s, err := sqlitestore.NewWithConfig(newDB(t), sqlitestore.Config{})
+	require.NoError(t, err)
+	t.Cleanup(s.StopCleanup)
+
+	require.NoError(t, s.Commit("token-a", []byte("payload"), time.Now().Add(time.Hour)))
+
+	_, found, err := s.Find("token-a")
+	require.NoError(t, err)
+	assert.True(t, found)
 }
 
 func TestBackgroundCleanupRemovesExpiredRows(t *testing.T) {
