@@ -144,6 +144,31 @@ func TestContextVariantsRoundTrip(t *testing.T) {
 	assert.False(t, found)
 }
 
+func TestAllReturnsOnlyUnexpiredSessions(t *testing.T) {
+	t.Parallel()
+
+	s := sqlitestore.NewWithCleanupInterval(newDB(t), 0)
+
+	require.NoError(t, s.Commit("live-a", []byte("a"), time.Now().Add(time.Hour)))
+	require.NoError(t, s.Commit("live-b", []byte("b"), time.Now().Add(time.Hour)))
+	require.NoError(t, s.Commit("dead", []byte("c"), time.Now().Add(-time.Second)))
+
+	all, err := s.All()
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]byte{"live-a": []byte("a"), "live-b": []byte("b")}, all)
+}
+
+func TestAllOnEmptyTable(t *testing.T) {
+	t.Parallel()
+
+	s := sqlitestore.NewWithCleanupInterval(newDB(t), 0)
+
+	all, err := s.AllCtx(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, all)
+	assert.NotNil(t, all)
+}
+
 func TestBackgroundCleanupRemovesExpiredRows(t *testing.T) {
 	t.Parallel()
 

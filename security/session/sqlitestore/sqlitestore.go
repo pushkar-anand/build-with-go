@@ -40,8 +40,13 @@ type SQLiteStore struct {
 }
 
 // CtxStore, not just Store: scs then passes the request context down to each
-// query rather than calling the context-free methods.
-var _ scs.CtxStore = (*SQLiteStore)(nil)
+// query rather than calling the context-free methods. IterableStore backs
+// SessionManager.Iterate, e.g. to end every session for one account.
+var (
+	_ scs.CtxStore         = (*SQLiteStore)(nil)
+	_ scs.IterableStore    = (*SQLiteStore)(nil)
+	_ scs.IterableCtxStore = (*SQLiteStore)(nil)
+)
 
 // New returns a store over db whose background goroutine clears expired rows
 // every five minutes. Call StopCleanup to end that goroutine once the store is
@@ -117,6 +122,42 @@ func (s *SQLiteStore) DeleteCtx(ctx context.Context, token string) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE token = ?", token)
 
 	return err
+}
+
+// All returns the data for every unexpired session, keyed by token, or an empty
+// map when there are none.
+func (s *SQLiteStore) All() (map[string][]byte, error) {
+	return s.AllCtx(context.Background())
+}
+
+// AllCtx is All with a caller-supplied context.
+func (s *SQLiteStore) AllCtx(ctx context.Context) (map[string][]byte, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		"SELECT token, data FROM sessions WHERE expiry > ?",
+		time.Now().UnixNano(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	sessions := make(map[string][]byte)
+
+	for rows.Next() {
+		var (
+			token string
+			data  []byte
+		)
+
+		if err := rows.Scan(&token, &data); err != nil {
+			return nil, err
+		}
+
+		sessions[token] = data
+	}
+
+	return sessions, rows.Err()
 }
 
 // StopCleanup ends the background cleanup goroutine. Call it once, from a single
