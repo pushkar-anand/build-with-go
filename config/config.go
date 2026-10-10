@@ -52,9 +52,10 @@ type (
 		tagName   string
 		environ   func() []string
 
-		// splits maps a key pattern given to WithSplitKeyFor to the separator
-		// its environment value is split at.
-		splits map[string]string
+		// splitSep is the separator WithSplitKeyFor gave, and splitKeys the
+		// key patterns whose environment value is split at it.
+		splitSep  string
+		splitKeys map[string]struct{}
 	}
 )
 
@@ -114,16 +115,22 @@ func WithEnviron(fn func() []string) Option {
 // value without sep stays one string, which decodes into a one-item list. A
 // "*" in a key matches any one segment, for a list inside a map:
 // "plugins.*.hosts". Every other key keeps its value whole, separators and
-// all, so name only list keys. Calls add up, and each key keeps the sep it
-// was last given.
+// all, so name only list keys. Keys from several calls add up, and the sep
+// last given applies to all of them. An empty sep is ignored.
 func WithSplitKeyFor(sep string, keys ...string) Option {
 	return optionFunc(func(l *loader) {
-		if l.splits == nil {
-			l.splits = make(map[string]string)
+		if sep == "" {
+			return
 		}
 
+		if l.splitKeys == nil {
+			l.splitKeys = make(map[string]struct{}, len(keys))
+		}
+
+		l.splitSep = sep
+
 		for _, key := range keys {
-			l.splits[key] = sep
+			l.splitKeys[key] = struct{}{}
 		}
 	})
 }
@@ -177,12 +184,11 @@ func (l *loader) envOpt() env.Opt {
 		TransformFunc: func(key, value string) (string, any) {
 			path := envKeyToPath(l.envPrefix, key)
 
-			sep, ok := l.splitFor(path)
-			if !ok || !strings.Contains(value, sep) {
+			if !strings.Contains(value, l.splitSep) || !l.splits(path) {
 				return path, value
 			}
 
-			return path, splitItems(value, sep)
+			return path, splitItems(value, l.splitSep)
 		},
 	}
 }
@@ -194,22 +200,22 @@ func envKeyToPath(prefix, key string) string {
 	return strings.ReplaceAll(trimmed, nestSeparator, delim)
 }
 
-// splitFor returns the separator WithSplitKeyFor gave for path, matching "*"
-// against any one segment.
-func (l *loader) splitFor(path string) (string, bool) {
-	if sep, ok := l.splits[path]; ok {
-		return sep, true
+// splits reports whether WithSplitKeyFor named path, a "*" in a key matching
+// any one segment.
+func (l *loader) splits(path string) bool {
+	if _, ok := l.splitKeys[path]; ok {
+		return true
 	}
 
 	segments := strings.Split(path, delim)
 
-	for pattern, sep := range l.splits {
-		if matchKey(strings.Split(pattern, delim), segments) {
-			return sep, true
+	for pattern := range l.splitKeys {
+		if strings.Contains(pattern, "*") && matchKey(strings.Split(pattern, delim), segments) {
+			return true
 		}
 	}
 
-	return "", false
+	return false
 }
 
 // matchKey reports whether path matches pattern segment by segment, a "*"

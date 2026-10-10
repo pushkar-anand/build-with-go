@@ -37,7 +37,6 @@ type (
 	lists struct {
 		Origins []string        `koanf:"origins"`
 		Single  []string        `koanf:"single"`
-		Spaced  []string        `koanf:"spaced"`
 		Hosts   map[string]host `koanf:"hosts"`
 		Title   string          `koanf:"title"`
 	}
@@ -48,6 +47,10 @@ type (
 
 	envListCfg struct {
 		Section lists `koanf:"fromenvlist"`
+	}
+
+	envSpacedCfg struct {
+		Section lists `koanf:"fromenvspaced"`
 	}
 
 	yamlListCfg struct {
@@ -134,13 +137,10 @@ func TestLoad_MissingYAMLFileIsNotAnError(t *testing.T) {
 func TestLoad_EnvSplitsNamedKeys(t *testing.T) {
 	cfg, err := Load[envListCfg](
 		WithEnvPrefix("APP_"),
-		WithSplitKeyFor(",", "fromenvlist.origins", "fromenvlist.single"),
-		WithSplitKeyFor(" ", "fromenvlist.spaced"),
-		WithSplitKeyFor(",", "fromenvlist.hosts.*.names"),
+		WithSplitKeyFor(",", "fromenvlist.origins", "fromenvlist.single", "fromenvlist.hosts.*.names"),
 		environ(
 			"APP_FROMENVLIST__ORIGINS=https://a.example, https://b.example,",
 			"APP_FROMENVLIST__SINGLE=https://a.example",
-			"APP_FROMENVLIST__SPACED=a  b c",
 			"APP_FROMENVLIST__HOSTS__GATEWAY__NAMES=gw,router",
 			"APP_FROMENVLIST__TITLE=one, two",
 		),
@@ -149,9 +149,20 @@ func TestLoad_EnvSplitsNamedKeys(t *testing.T) {
 
 	assert.Equal(t, []string{"https://a.example", "https://b.example"}, cfg.Section.Origins)
 	assert.Equal(t, []string{"https://a.example"}, cfg.Section.Single, "no sep, one item")
-	assert.Equal(t, []string{"a", "b", "c"}, cfg.Section.Spaced)
 	assert.Equal(t, []string{"gw", "router"}, cfg.Section.Hosts["gateway"].Names, "* matches the instance")
 	assert.Equal(t, "one, two", cfg.Section.Title, "an unnamed key keeps its commas")
+}
+
+// A sep of a space takes any run of spaces as one break.
+func TestLoad_EnvSplitsOnSpaces(t *testing.T) {
+	cfg, err := Load[envSpacedCfg](
+		WithEnvPrefix("APP_"),
+		WithSplitKeyFor(" ", "fromenvspaced.origins"),
+		environ("APP_FROMENVSPACED__ORIGINS=a  b c"),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"a", "b", "c"}, cfg.Section.Origins)
 }
 
 // A YAML list decodes as it always has, its items unsplit.
