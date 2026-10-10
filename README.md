@@ -125,8 +125,12 @@ APP_DATABASE__PASSWORD      ->  database.password
 APP_SERVER__READ_TIMEOUT    ->  server.read_timeout
 ```
 
-A **comma** separates the items of a `[]string` field, since a variable holds
-one string:
+A variable holds one string, so a list key is named with `WithSplitKeyFor`
+and its items separated:
+
+```go
+config.WithSplitKeyFor(",", "server.allowed_origins")
+```
 
 ```
 APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example

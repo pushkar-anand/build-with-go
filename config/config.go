@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"reflect"
 	"strings"
 
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env/v2"
@@ -32,12 +30,6 @@ const (
 	//
 	//	SERVER__READ_TIMEOUT  ->  server.read_timeout
 	nestSeparator = "__"
-
-	// listSeparator splits a string decoded into a []string field, which is
-	// how an environment variable, a single string, gives a list:
-	//
-	//	SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
-	listSeparator = ","
 )
 
 // k is a process-wide store. Successive loads merge into it, which is koanf's
@@ -59,6 +51,10 @@ type (
 		defaults  map[string]any
 		tagName   string
 		environ   func() []string
+
+		// splits maps a key pattern given to WithSplitKeyFor to the separator
+		// its environment value is split at.
+		splits map[string]string
 	}
 )
 
@@ -104,6 +100,31 @@ func WithTag(tag string) Option {
 func WithEnviron(fn func() []string) Option {
 	return optionFunc(func(l *loader) {
 		l.environ = fn
+	})
+}
+
+// WithSplitKeyFor names keys whose environment variable holds a list, its items
+// separated by sep, since a variable holds one string:
+//
+//	WithSplitKeyFor(",", "server.allowed_origins")
+//	APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
+//
+// A value is split only when it contains sep. Each item is trimmed of space
+// and empty items are dropped, so a sep of " " takes any run of spaces. A
+// value without sep stays one string, which decodes into a one-item list. A
+// "*" in a key matches any one segment, for a list inside a map:
+// "plugins.*.hosts". Every other key keeps its value whole, separators and
+// all, so name only list keys. Calls add up, and each key keeps the sep it
+// was last given.
+func WithSplitKeyFor(sep string, keys ...string) Option {
+	return optionFunc(func(l *loader) {
+		if l.splits == nil {
+			l.splits = make(map[string]string)
+		}
+
+		for _, key := range keys {
+			l.splits[key] = sep
+		}
 	})
 }
 
@@ -154,7 +175,14 @@ func (l *loader) envOpt() env.Opt {
 		Prefix:      l.envPrefix,
 		EnvironFunc: l.environ,
 		TransformFunc: func(key, value string) (string, any) {
-			return envKeyToPath(l.envPrefix, key), value
+			path := envKeyToPath(l.envPrefix, key)
+
+			sep, ok := l.splitFor(path)
+			if !ok || !strings.Contains(value, sep) {
+				return path, value
+			}
+
+			return path, splitItems(value, sep)
 		},
 	}
 }
@@ -166,53 +194,62 @@ func envKeyToPath(prefix, key string) string {
 	return strings.ReplaceAll(trimmed, nestSeparator, delim)
 }
 
+// splitFor returns the separator WithSplitKeyFor gave for path, matching "*"
+// against any one segment.
+func (l *loader) splitFor(path string) (string, bool) {
+	if sep, ok := l.splits[path]; ok {
+		return sep, true
+	}
+
+	segments := strings.Split(path, delim)
+
+	for pattern, sep := range l.splits {
+		if matchKey(strings.Split(pattern, delim), segments) {
+			return sep, true
+		}
+	}
+
+	return "", false
+}
+
+// matchKey reports whether path matches pattern segment by segment, a "*"
+// segment matching any one.
+func matchKey(pattern, path []string) bool {
+	if len(pattern) != len(path) {
+		return false
+	}
+
+	for i, p := range pattern {
+		if p != "*" && p != path[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// splitItems splits value at sep, trimming each item and dropping empty ones.
+func splitItems(value, sep string) []string {
+	var items []string
+
+	for item := range strings.SplitSeq(value, sep) {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+
+	return items
+}
+
 func unmarshal[T any](tag string) (*T, error) {
 	c := new(T)
 
-	// Passing a DecoderConfig replaces koanf's default hooks, so they are
-	// restated around stringToList. mapstructure's text hook stands in for
-	// koanf's unexported one; the two differ only for input that is already
-	// a named string type, which neither YAML nor the environment produces.
-	err := k.UnmarshalWithConf("", c, koanf.UnmarshalConf{
-		Tag: tag,
-		DecoderConfig: &mapstructure.DecoderConfig{
-			DecodeHook: mapstructure.ComposeDecodeHookFunc(
-				mapstructure.StringToTimeDurationHookFunc(),
-				stringToList(),
-				mapstructure.TextUnmarshallerHookFunc(),
-			),
-			WeaklyTypedInput: true,
-		},
-	})
+	err := k.UnmarshalWithConf("", c, koanf.UnmarshalConf{Tag: tag})
 	if err != nil {
 		return nil, fmt.Errorf("config: unmarshalling into %T: %w", c, err)
 	}
 
 	return c, nil
-}
-
-// stringToList splits a string decoded into a []string field at each
-// listSeparator, trimming the space around each item, so "a, b" gives two
-// items. An empty string gives an empty list. A value already a list, as YAML
-// gives one, and a string decoded into any other type are left alone.
-func stringToList() mapstructure.DecodeHookFuncType {
-	return func(from, to reflect.Type, data any) (any, error) {
-		if from.Kind() != reflect.String || to != reflect.TypeFor[[]string]() {
-			return data, nil
-		}
-
-		s := reflect.ValueOf(data).String()
-		if strings.TrimSpace(s) == "" {
-			return []string{}, nil
-		}
-
-		items := strings.Split(s, listSeparator)
-		for i := range items {
-			items[i] = strings.TrimSpace(items[i])
-		}
-
-		return items, nil
-	}
 }
 
 func fileNotExistsErr(err error) bool {

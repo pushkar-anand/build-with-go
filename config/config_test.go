@@ -1,7 +1,6 @@
 package config
 
 import (
-	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,10 +35,15 @@ type (
 	}
 
 	lists struct {
-		Origins []string   `koanf:"origins"`
-		Empty   []string   `koanf:"empty"`
-		Title   string     `koanf:"title"`
-		Addr    netip.Addr `koanf:"addr"`
+		Origins []string        `koanf:"origins"`
+		Single  []string        `koanf:"single"`
+		Spaced  []string        `koanf:"spaced"`
+		Hosts   map[string]host `koanf:"hosts"`
+		Title   string          `koanf:"title"`
+	}
+
+	host struct {
+		Names []string `koanf:"names"`
 	}
 
 	envListCfg struct {
@@ -124,32 +128,37 @@ func TestLoad_MissingYAMLFileIsNotAnError(t *testing.T) {
 	assert.Equal(t, "0.0.0.0", cfg.Section.Host)
 }
 
-// An environment variable gives a list as one string, split at each comma
-// with the space around items trimmed. Only []string fields are split: a
-// string field keeps its commas, and a text-unmarshalled field still decodes.
-func TestLoad_EnvGivesListsCommaSeparated(t *testing.T) {
+// A key named with WithSplitKeyFor takes a list from the environment: split at
+// its sep, items trimmed and empty ones dropped. Keys not named keep their
+// value whole, separators and all.
+func TestLoad_EnvSplitsNamedKeys(t *testing.T) {
 	cfg, err := Load[envListCfg](
 		WithEnvPrefix("APP_"),
+		WithSplitKeyFor(",", "fromenvlist.origins", "fromenvlist.single"),
+		WithSplitKeyFor(" ", "fromenvlist.spaced"),
+		WithSplitKeyFor(",", "fromenvlist.hosts.*.names"),
 		environ(
-			"APP_FROMENVLIST__ORIGINS=https://a.example, https://b.example",
-			"APP_FROMENVLIST__EMPTY=",
+			"APP_FROMENVLIST__ORIGINS=https://a.example, https://b.example,",
+			"APP_FROMENVLIST__SINGLE=https://a.example",
+			"APP_FROMENVLIST__SPACED=a  b c",
+			"APP_FROMENVLIST__HOSTS__GATEWAY__NAMES=gw,router",
 			"APP_FROMENVLIST__TITLE=one, two",
-			"APP_FROMENVLIST__ADDR=192.0.2.1",
 		),
 	)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"https://a.example", "https://b.example"}, cfg.Section.Origins)
-	assert.Equal(t, []string{}, cfg.Section.Empty)
-	assert.Equal(t, "one, two", cfg.Section.Title)
-	assert.Equal(t, netip.MustParseAddr("192.0.2.1"), cfg.Section.Addr)
+	assert.Equal(t, []string{"https://a.example"}, cfg.Section.Single, "no sep, one item")
+	assert.Equal(t, []string{"a", "b", "c"}, cfg.Section.Spaced)
+	assert.Equal(t, []string{"gw", "router"}, cfg.Section.Hosts["gateway"].Names, "* matches the instance")
+	assert.Equal(t, "one, two", cfg.Section.Title, "an unnamed key keeps its commas")
 }
 
 // A YAML list decodes as it always has, its items unsplit.
 func TestLoad_YAMLListsAreUntouched(t *testing.T) {
 	path := writeYAML(t, "fromyamllist:\n  origins: [\"https://a.example\", \"x,y\"]\n")
 
-	cfg, err := Load[yamlListCfg](WithYAML(path), environ())
+	cfg, err := Load[yamlListCfg](WithYAML(path), WithSplitKeyFor(",", "fromyamllist.origins"), environ())
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"https://a.example", "x,y"}, cfg.Section.Origins)
