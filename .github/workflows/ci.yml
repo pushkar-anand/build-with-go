@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels its in-flight run. Runs on main are never
+# cancelled, so every main commit still saves its coverage baseline.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    uses: pushkar-anand/.github/.github/workflows/go-ci.yml@main
+    # The staticcheck job posts review comments, so it needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      run-lint: true
+
+  coverage:
+    uses: pushkar-anand/.github/.github/workflows/go-coverage.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      comment: false

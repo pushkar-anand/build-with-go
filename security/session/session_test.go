@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/alexedwards/scs/v2/memstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ type identity struct {
 func loadSession(t *testing.T, s *Session[identity]) context.Context {
 	t.Helper()
 
-	ctx, err := s.Load(t.Context(), "")
+	ctx, err := s.Manager().Load(t.Context(), "")
 	require.NoError(t, err)
 
 	return ctx
@@ -67,7 +68,7 @@ func TestSetCurrent(t *testing.T) {
 	assert.Equal(t, int64(42), user.UserID)
 	assert.Equal(t, "ada", user.Username)
 	assert.Equal(t, "admin", user.Role)
-	assert.Equal(t, StatusModified, s.Status(ctx))
+	assert.Equal(t, scs.Modified, s.Status(ctx))
 }
 
 func TestUpdate(t *testing.T) {
@@ -124,9 +125,9 @@ func TestClear(t *testing.T) {
 	_, ok := s.Current(ctx)
 	assert.False(t, ok, "the document is gone")
 
-	_, _, err := s.Commit(ctx)
+	_, _, err := s.Manager().Commit(ctx)
 	require.NoError(t, err, "the session itself survives a Clear")
-	assert.Equal(t, StatusModified, s.Status(ctx))
+	assert.Equal(t, scs.Modified, s.Status(ctx))
 }
 
 func TestLoadAndSavePersistsAcrossRequests(t *testing.T) {
@@ -257,7 +258,7 @@ func TestRenewKeepsDocument(t *testing.T) {
 	ctx := loadSession(t, s)
 
 	s.Set(ctx, identity{UserID: 42, Role: "admin"})
-	old, _, err := s.Commit(ctx)
+	old, _, err := s.Manager().Commit(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, old)
 
@@ -278,7 +279,7 @@ func TestDestroy(t *testing.T) {
 	s.Set(ctx, identity{UserID: 42})
 
 	require.NoError(t, s.Destroy(ctx))
-	assert.Equal(t, StatusDestroyed, s.Status(ctx))
+	assert.Equal(t, scs.Destroyed, s.Status(ctx))
 
 	_, ok := s.Current(ctx)
 	assert.False(t, ok, "a destroyed session holds no document")
@@ -393,11 +394,11 @@ func TestCommitAndLoad(t *testing.T) {
 	ctx := loadSession(t, s)
 
 	s.Set(ctx, identity{UserID: 42, Username: "ada"})
-	token, _, err := s.Commit(ctx)
+	token, _, err := s.Manager().Commit(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
-	ctx2, err := s.Load(t.Context(), token)
+	ctx2, err := s.Manager().Load(t.Context(), token)
 	require.NoError(t, err)
 
 	user, ok := s.Current(ctx2)
@@ -472,7 +473,7 @@ func get(t *testing.T, base string, cookie *http.Cookie, path string, wantStatus
 func Example() {
 	sm := New[identity]()
 
-	ctx, err := sm.Load(context.Background(), "")
+	ctx, err := sm.Manager().Load(context.Background(), "")
 	if err != nil {
 		panic(err)
 	}
