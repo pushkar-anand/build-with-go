@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -221,20 +222,29 @@ func TestNewWithConfigZeroValueMatchesNew(t *testing.T) {
 func TestBackgroundCleanupRemovesExpiredRows(t *testing.T) {
 	t.Parallel()
 
-	db := newDB(t)
-	s := sqlitestore.NewWithCleanupInterval(db, 20*time.Millisecond)
-	t.Cleanup(s.StopCleanup)
+	// The bubble's fake clock drives the sweep ticker, so the test advances
+	// exactly one interval and inspects the table once the sweep has finished,
+	// instead of polling a real ticker and racing its DELETE.
+	synctest.Test(t, func(t *testing.T) {
+		const interval = time.Minute
 
-	require.NoError(t, s.Commit("expired", []byte("x"), time.Now().Add(-time.Second)))
-	require.NoError(t, s.Commit("live", []byte("y"), time.Now().Add(time.Hour)))
+		db := newDB(t)
+		s := sqlitestore.NewWithCleanupInterval(db, interval)
+		t.Cleanup(s.StopCleanup)
 
-	assert.Eventually(t, func() bool {
-		return rowCount(t, db) == 1
-	}, time.Second, 10*time.Millisecond, "the sweep drops the expired row")
+		require.NoError(t, s.Commit("expired", []byte("x"), time.Now().Add(-time.Second)))
+		require.NoError(t, s.Commit("live", []byte("y"), time.Now().Add(time.Hour)))
 
-	_, found, err := s.Find("live")
-	require.NoError(t, err)
-	assert.True(t, found, "the sweep leaves a live row alone")
+		synctest.Sleep(interval - time.Nanosecond)
+		assert.Equal(t, 2, rowCount(t, db), "no sweep before the interval")
+
+		synctest.Sleep(time.Nanosecond)
+		assert.Equal(t, 1, rowCount(t, db), "the sweep drops the expired row")
+
+		_, found, err := s.Find("live")
+		require.NoError(t, err)
+		assert.True(t, found, "the sweep leaves a live row alone")
+	})
 }
 
 func TestStopCleanupWithoutGoroutine(t *testing.T) {
