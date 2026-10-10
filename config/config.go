@@ -181,16 +181,24 @@ func (l *loader) envOpt() env.Opt {
 		TransformFunc: func(key, value string) (string, any) {
 			path := envKeyToPath(l.envPrefix, key)
 
-			if _, ok := l.splitKeys[path]; !ok || !strings.Contains(value, l.splitSep) {
+			_, ok := l.splitKeys[path]
+			if !ok {
 				return path, value
 			}
 
-			items := strings.Split(value, l.splitSep)
+			if !strings.Contains(value, l.splitSep) {
+				return path, value
+			}
+
+			items := strings.Split(strings.TrimSpace(value), l.splitSep)
+
 			for i := range items {
 				items[i] = strings.TrimSpace(items[i])
 			}
 
-			return path, slices.DeleteFunc(items, func(s string) bool { return s == "" })
+			items = slices.DeleteFunc(items, func(s string) bool { return s == "" })
+
+			return path, items
 		},
 	}
 }
