@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 
+	"github.com/pushkar-anand/build-with-go/ctxval"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -131,7 +133,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, float64(18), logEntry["bytes"])
 	})
 
-	t.Run("uses X-Forwarded-For if available", func(t *testing.T) {
+	t.Run("ignores forwarding headers", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := slog.NewJSONHandler(&buf, nil)
 		log := slog.New(h)
@@ -143,8 +145,9 @@ func TestNewHTTPLogger(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/proxy", nil)
-		req.RemoteAddr = "10.0.0.1:1234"
+		req.RemoteAddr = "192.0.2.10:1234"
 		req.Header.Set("X-Forwarded-For", "203.0.113.195, 198.51.100.1")
+		req.Header.Set("X-Real-IP", "203.0.113.195")
 
 		rr := httptest.NewRecorder()
 
@@ -154,10 +157,10 @@ func TestNewHTTPLogger(t *testing.T) {
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "203.0.113.195", logEntry["remote_ip"])
+		assert.Equal(t, "192.0.2.10:1234", logEntry["remote_ip"])
 	})
 
-	t.Run("uses X-Real-IP if available", func(t *testing.T) {
+	t.Run("uses the client address in the context", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := slog.NewJSONHandler(&buf, nil)
 		log := slog.New(h)
@@ -169,8 +172,8 @@ func TestNewHTTPLogger(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/proxy", nil)
-		req.RemoteAddr = "10.0.0.1:1234"
-		req.Header.Set("X-Real-IP", "203.0.113.195")
+		req.RemoteAddr = "192.0.2.10:1234"
+		req = req.WithContext(ctxval.WithClientAddr(req.Context(), netip.MustParseAddr("203.0.113.195")))
 
 		rr := httptest.NewRecorder()
 
