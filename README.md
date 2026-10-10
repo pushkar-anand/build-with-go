@@ -125,6 +125,17 @@ APP_DATABASE__PASSWORD      ->  database.password
 APP_SERVER__READ_TIMEOUT    ->  server.read_timeout
 ```
 
+A variable holds one string, so a list key is named with `WithSplitKeyFor`
+and its items separated:
+
+```go
+config.WithSplitKeyFor(",", "server.allowed_origins")
+```
+
+```
+APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
+```
+
 ### http/request
 
 One `Reader` serves every request type; the type parameter goes at the call

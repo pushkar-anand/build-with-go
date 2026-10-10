@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/knadh/koanf/parsers/yaml"
@@ -51,6 +52,11 @@ type (
 		defaults  map[string]any
 		tagName   string
 		environ   func() []string
+
+		// splitSep is the separator WithSplitKeyFor gave, and splitKeys the
+		// key patterns whose environment value is split at it.
+		splitSep  string
+		splitKeys map[string]struct{}
 	}
 )
 
@@ -96,6 +102,33 @@ func WithTag(tag string) Option {
 func WithEnviron(fn func() []string) Option {
 	return optionFunc(func(l *loader) {
 		l.environ = fn
+	})
+}
+
+// WithSplitKeyFor names keys whose environment variable holds a list of items
+// separated by sep:
+//
+//	WithSplitKeyFor(",", "server.allowed_origins")
+//	APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
+//
+// Items are trimmed and empty ones dropped. A key not named keeps its value
+// whole. Keys from several calls add up, and the last sep given applies to
+// all of them. An empty sep is ignored.
+func WithSplitKeyFor(sep string, keys ...string) Option {
+	return optionFunc(func(l *loader) {
+		if sep == "" {
+			return
+		}
+
+		if l.splitKeys == nil {
+			l.splitKeys = make(map[string]struct{}, len(keys))
+		}
+
+		l.splitSep = sep
+
+		for _, key := range keys {
+			l.splitKeys[key] = struct{}{}
+		}
 	})
 }
 
@@ -146,7 +179,26 @@ func (l *loader) envOpt() env.Opt {
 		Prefix:      l.envPrefix,
 		EnvironFunc: l.environ,
 		TransformFunc: func(key, value string) (string, any) {
-			return envKeyToPath(l.envPrefix, key), value
+			path := envKeyToPath(l.envPrefix, key)
+
+			_, ok := l.splitKeys[path]
+			if !ok {
+				return path, value
+			}
+
+			if !strings.Contains(value, l.splitSep) {
+				return path, value
+			}
+
+			items := strings.Split(strings.TrimSpace(value), l.splitSep)
+
+			for i := range items {
+				items[i] = strings.TrimSpace(items[i])
+			}
+
+			items = slices.DeleteFunc(items, func(s string) bool { return s == "" })
+
+			return path, items
 		},
 	}
 }
