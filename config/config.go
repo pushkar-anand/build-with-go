@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"reflect"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env/v2"
@@ -30,6 +32,12 @@ const (
 	//
 	//	SERVER__READ_TIMEOUT  ->  server.read_timeout
 	nestSeparator = "__"
+
+	// listSeparator splits a string decoded into a []string field, which is
+	// how an environment variable, a single string, gives a list:
+	//
+	//	SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
+	listSeparator = ","
 )
 
 // k is a process-wide store. Successive loads merge into it, which is koanf's
@@ -161,12 +169,50 @@ func envKeyToPath(prefix, key string) string {
 func unmarshal[T any](tag string) (*T, error) {
 	c := new(T)
 
-	err := k.UnmarshalWithConf("", c, koanf.UnmarshalConf{Tag: tag})
+	// Passing a DecoderConfig replaces koanf's default hooks, so they are
+	// restated around stringToList. mapstructure's text hook stands in for
+	// koanf's unexported one; the two differ only for input that is already
+	// a named string type, which neither YAML nor the environment produces.
+	err := k.UnmarshalWithConf("", c, koanf.UnmarshalConf{
+		Tag: tag,
+		DecoderConfig: &mapstructure.DecoderConfig{
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				stringToList(),
+				mapstructure.TextUnmarshallerHookFunc(),
+			),
+			WeaklyTypedInput: true,
+		},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("config: unmarshalling into %T: %w", c, err)
 	}
 
 	return c, nil
+}
+
+// stringToList splits a string decoded into a []string field at each
+// listSeparator, trimming the space around each item, so "a, b" gives two
+// items. An empty string gives an empty list. A value already a list, as YAML
+// gives one, and a string decoded into any other type are left alone.
+func stringToList() mapstructure.DecodeHookFuncType {
+	return func(from, to reflect.Type, data any) (any, error) {
+		if from.Kind() != reflect.String || to != reflect.TypeFor[[]string]() {
+			return data, nil
+		}
+
+		s := reflect.ValueOf(data).String()
+		if strings.TrimSpace(s) == "" {
+			return []string{}, nil
+		}
+
+		items := strings.Split(s, listSeparator)
+		for i := range items {
+			items[i] = strings.TrimSpace(items[i])
+		}
+
+		return items, nil
+	}
 }
 
 func fileNotExistsErr(err error) bool {

@@ -125,6 +125,13 @@ APP_DATABASE__PASSWORD      ->  database.password
 APP_SERVER__READ_TIMEOUT    ->  server.read_timeout
 ```
 
+A **comma** separates the items of a `[]string` field, since a variable holds
+one string:
+
+```
+APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
+```
+
 ### http/request
 
 One `Reader` serves every request type; the type parameter goes at the call

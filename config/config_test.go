@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,6 +33,21 @@ type (
 
 	missingCfg struct {
 		Section server `koanf:"frommissing"`
+	}
+
+	lists struct {
+		Origins []string   `koanf:"origins"`
+		Empty   []string   `koanf:"empty"`
+		Title   string     `koanf:"title"`
+		Addr    netip.Addr `koanf:"addr"`
+	}
+
+	envListCfg struct {
+		Section lists `koanf:"fromenvlist"`
+	}
+
+	yamlListCfg struct {
+		Section lists `koanf:"fromyamllist"`
 	}
 )
 
@@ -106,6 +122,37 @@ func TestLoad_MissingYAMLFileIsNotAnError(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "0.0.0.0", cfg.Section.Host)
+}
+
+// An environment variable gives a list as one string, split at each comma
+// with the space around items trimmed. Only []string fields are split: a
+// string field keeps its commas, and a text-unmarshalled field still decodes.
+func TestLoad_EnvGivesListsCommaSeparated(t *testing.T) {
+	cfg, err := Load[envListCfg](
+		WithEnvPrefix("APP_"),
+		environ(
+			"APP_FROMENVLIST__ORIGINS=https://a.example, https://b.example",
+			"APP_FROMENVLIST__EMPTY=",
+			"APP_FROMENVLIST__TITLE=one, two",
+			"APP_FROMENVLIST__ADDR=192.0.2.1",
+		),
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"https://a.example", "https://b.example"}, cfg.Section.Origins)
+	assert.Equal(t, []string{}, cfg.Section.Empty)
+	assert.Equal(t, "one, two", cfg.Section.Title)
+	assert.Equal(t, netip.MustParseAddr("192.0.2.1"), cfg.Section.Addr)
+}
+
+// A YAML list decodes as it always has, its items unsplit.
+func TestLoad_YAMLListsAreUntouched(t *testing.T) {
+	path := writeYAML(t, "fromyamllist:\n  origins: [\"https://a.example\", \"x,y\"]\n")
+
+	cfg, err := Load[yamlListCfg](WithYAML(path), environ())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"https://a.example", "x,y"}, cfg.Section.Origins)
 }
 
 func Test_envKeyToPath(t *testing.T) {
