@@ -78,6 +78,13 @@ rather than leaking an internal message.
 Loggers from `logger.New` read it from there, so every line logged during a
 request is attributable without handlers passing anything around.
 
+**Forwarding headers are read only from proxies you name.** A client can send
+`X-Forwarded-For` as easily as a proxy can, so `clientip.New` reads the one
+header your proxy writes (`X-Forwarded-For`, `X-Real-IP` or RFC 7239
+`Forwarded`), and only on requests that arrive from an address you list as
+trusted. The request logger records the address it resolves, and never reads
+the headers itself.
+
 **Shutdown actually drains.** Cancelling the context passed to `Serve` stops the
 server accepting connections and waits for in-flight requests. `Serve` returns
 only once that has finished, so exiting when it returns is safe.
@@ -92,6 +99,7 @@ only once that has finished, so exiting when it returns is safe.
 | [`ctxval`](ctxval) | request-scoped context values |
 | [`http/server`](http/server) | `http.Server` with context-driven graceful shutdown |
 | [`http/middleware`](http/middleware) | request ID middleware |
+| [`http/clientip`](http/clientip) | the client's address, read through trusted proxies |
 | [`http/request`](http/request) | decode and validate JSON, form, and query data |
 | [`http/response`](http/response) | JSON responses and RFC 9457 problem documents |
 
