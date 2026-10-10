@@ -36,7 +36,7 @@ const (
 )
 
 // ParseHeader returns the Header that s names, ignoring case, so a choice can
-// be read from configuration.
+// be read from configuration. It returns an error for any other name.
 func ParseHeader(s string) (Header, error) {
 	for _, h := range []Header{XForwardedFor, XRealIP, Forwarded} {
 		if strings.EqualFold(s, string(h)) {
@@ -89,7 +89,8 @@ func WithHeader(h Header) Option {
 }
 
 // WithLogger sets where the Resolver reports a forwarding header that arrived
-// from an address it does not trust. The default is slog.Default.
+// from an address it does not trust. The default is slog.Default. A nil log
+// is ignored.
 func WithLogger(log *slog.Logger) Option {
 	return func(r *Resolver) {
 		if log != nil {
@@ -111,7 +112,8 @@ type Resolver struct {
 	warned atomic.Bool
 }
 
-// New returns a Resolver configured by opts.
+// New returns a Resolver that trusts no proxy and reads X-Forwarded-For,
+// unless opts say otherwise.
 func New(opts ...Option) *Resolver {
 	r := &Resolver{
 		header: XForwardedFor,
@@ -144,6 +146,9 @@ func (r *Resolver) Middleware(next http.Handler) http.Handler {
 // else, or when the header holds an entry that is not an address, it is the
 // address req arrived from. The bool is false only when req.RemoteAddr holds
 // no IP address.
+//
+// The first request that carries the header from an untrusted address is
+// logged as a warning.
 func (r *Resolver) Addr(req *http.Request) (netip.Addr, bool) {
 	peer, ok := parseAddr(req.RemoteAddr)
 	if !ok {
@@ -188,13 +193,15 @@ func (r *Resolver) Addr(req *http.Request) (netip.Addr, bool) {
 	return r.walk(peer, hops), true
 }
 
-// walk returns the client address in hops, the header's entries in the order
-// proxies added them. Entries are read from the nearest proxy outwards, since
-// only the entries trusted proxies added can be believed: anything to the left
-// of the first untrusted address could have been written by that client.
+// walk returns the client address among hops, the header's entries in the
+// order proxies added them, or peer when an entry it reaches is not an
+// address.
 func (r *Resolver) walk(peer netip.Addr, hops []string) netip.Addr {
 	var addr netip.Addr
 
+	// Read from the nearest proxy outwards. Only the entries trusted proxies
+	// added can be believed: anything to the left of the first untrusted
+	// address could have been written by that client.
 	for i := len(hops) - 1; i >= 0; i-- {
 		var ok bool
 
@@ -230,7 +237,7 @@ func (r *Resolver) trusts(addr netip.Addr) bool {
 
 // forwardedFor returns the for= value of each element in a Forwarded header's
 // values, in order. An element without exactly one for= parameter contributes
-// an empty value, which no address parses from, so the walk stops there.
+// an empty value, which is not an address.
 func forwardedFor(values []string) []string {
 	var hops []string
 
