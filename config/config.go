@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/knadh/koanf/parsers/yaml"
@@ -104,19 +105,15 @@ func WithEnviron(fn func() []string) Option {
 	})
 }
 
-// WithSplitKeyFor names keys whose environment variable holds a list, its items
-// separated by sep, since a variable holds one string:
+// WithSplitKeyFor names keys whose environment variable holds a list of items
+// separated by sep:
 //
 //	WithSplitKeyFor(",", "server.allowed_origins")
 //	APP_SERVER__ALLOWED_ORIGINS=https://a.example,https://b.example
 //
-// A value is split only when it contains sep. Each item is trimmed of space
-// and empty items are dropped, so a sep of " " takes any run of spaces. A
-// value without sep stays one string, which decodes into a one-item list. A
-// "*" in a key matches any one segment, for a list inside a map:
-// "plugins.*.hosts". Every other key keeps its value whole, separators and
-// all, so name only list keys. Keys from several calls add up, and the sep
-// last given applies to all of them. An empty sep is ignored.
+// Items are trimmed and empty ones dropped. A key not named keeps its value
+// whole. Keys from several calls add up, and the last sep given applies to
+// all of them. An empty sep is ignored.
 func WithSplitKeyFor(sep string, keys ...string) Option {
 	return optionFunc(func(l *loader) {
 		if sep == "" {
@@ -184,11 +181,16 @@ func (l *loader) envOpt() env.Opt {
 		TransformFunc: func(key, value string) (string, any) {
 			path := envKeyToPath(l.envPrefix, key)
 
-			if !strings.Contains(value, l.splitSep) || !l.splits(path) {
+			if _, ok := l.splitKeys[path]; !ok || !strings.Contains(value, l.splitSep) {
 				return path, value
 			}
 
-			return path, splitItems(value, l.splitSep)
+			items := strings.Split(value, l.splitSep)
+			for i := range items {
+				items[i] = strings.TrimSpace(items[i])
+			}
+
+			return path, slices.DeleteFunc(items, func(s string) bool { return s == "" })
 		},
 	}
 }
@@ -198,53 +200,6 @@ func envKeyToPath(prefix, key string) string {
 	trimmed := strings.ToLower(strings.TrimPrefix(key, prefix))
 
 	return strings.ReplaceAll(trimmed, nestSeparator, delim)
-}
-
-// splits reports whether WithSplitKeyFor named path, a "*" in a key matching
-// any one segment.
-func (l *loader) splits(path string) bool {
-	if _, ok := l.splitKeys[path]; ok {
-		return true
-	}
-
-	segments := strings.Split(path, delim)
-
-	for pattern := range l.splitKeys {
-		if strings.Contains(pattern, "*") && matchKey(strings.Split(pattern, delim), segments) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// matchKey reports whether path matches pattern segment by segment, a "*"
-// segment matching any one.
-func matchKey(pattern, path []string) bool {
-	if len(pattern) != len(path) {
-		return false
-	}
-
-	for i, p := range pattern {
-		if p != "*" && p != path[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-// splitItems splits value at sep, trimming each item and dropping empty ones.
-func splitItems(value, sep string) []string {
-	var items []string
-
-	for item := range strings.SplitSeq(value, sep) {
-		if item = strings.TrimSpace(item); item != "" {
-			items = append(items, item)
-		}
-	}
-
-	return items
 }
 
 func unmarshal[T any](tag string) (*T, error) {
