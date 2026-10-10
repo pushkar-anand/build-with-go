@@ -2,8 +2,7 @@
 //
 // The request ID placed here by http/middleware is picked up automatically by
 // the logger, so every line logged during a request is attributable to it
-// without handlers passing the ID around. The client address placed here by
-// http/clientip is what the HTTP request logger records.
+// without handlers passing the ID around.
 package ctxval
 
 import "context"
