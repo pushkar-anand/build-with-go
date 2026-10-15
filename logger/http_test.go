@@ -46,7 +46,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		assert.Equal(t, "GET", logEntry["method"])
 		assert.Equal(t, "/test", logEntry["path"])
 		assert.Equal(t, "HTTP/1.1", logEntry["protocol"])
-		assert.Equal(t, "127.0.0.1:1234", logEntry["client_ip"])
+		assert.Equal(t, "127.0.0.1:1234", logEntry["remote_ip"])
 		assert.Equal(t, "Test-Agent", logEntry["user_agent"])
 		assert.Equal(t, float64(http.StatusOK), logEntry["status"])
 		assert.Equal(t, float64(2), logEntry["bytes"]) // "OK" is 2 bytes
@@ -157,7 +157,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "192.0.2.10:1234", logEntry["client_ip"])
+		assert.Equal(t, "192.0.2.10:1234", logEntry["remote_ip"])
 	})
 
 	t.Run("uses the client address in the context", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestNewHTTPLogger(t *testing.T) {
 		err := json.Unmarshal(buf.Bytes(), &logEntry)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "203.0.113.195", logEntry["client_ip"])
+		assert.Equal(t, "203.0.113.195", logEntry["remote_ip"])
 	})
 
 	t.Run("defaults to 200 OK if neither WriteHeader nor Write is called", func(t *testing.T) {

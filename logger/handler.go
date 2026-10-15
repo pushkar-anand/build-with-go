@@ -14,7 +14,7 @@ type contextHandler struct {
 
 // Handle adds context values to the log record before passing it to the underlying handler.
 //
-// The client address is added only when the record lacks a client_ip of its
+// The client address is added only when the record lacks a remote_ip of its
 // own, so the request logger's line, which always sets one, does not carry it
 // twice.
 func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -22,8 +22,8 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String("request_id", reqID))
 	}
 
-	if addr, ok := ctxval.ClientAddrFromContext(ctx); ok && !hasAttr(r, "client_ip") {
-		r.AddAttrs(slog.String("client_ip", addr.String()))
+	if addr, ok := ctxval.ClientAddrFromContext(ctx); ok && !hasAttr(r, "remote_ip") {
+		r.AddAttrs(slog.String("remote_ip", addr.String()))
 	}
 
 	return h.Handler.Handle(ctx, r)

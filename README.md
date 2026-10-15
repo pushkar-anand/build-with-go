@@ -83,7 +83,7 @@ request is attributable without handlers passing anything around.
 header your proxy writes (`X-Forwarded-For`, `X-Real-IP` or RFC 7239
 `Forwarded`), and only on requests that arrive from an address you list as
 trusted. Loggers from `logger.New` add the address it resolves to every line
-as `client_ip`, and the request logger records it too, never reading the
+as `remote_ip`, and the request logger records it too, never reading the
 headers itself.
 
 **Shutdown actually drains.** Cancelling the context passed to `Serve` stops the
