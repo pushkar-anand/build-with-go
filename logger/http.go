@@ -67,7 +67,7 @@ func (l *httpLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.String("protocol", r.Proto),
-			slog.String("remote_ip", clientIP(r)),
+			slog.String("client_ip", clientIP(r)),
 			slog.String("user_agent", r.UserAgent()),
 			slog.Int("status", rw.status),
 			slog.Int("bytes", rw.size),

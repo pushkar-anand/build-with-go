@@ -1,8 +1,9 @@
 // Package logger builds slog loggers, and the HTTP middleware that logs
 // requests through one.
 //
-// Loggers built here read the request ID from the context, so a handler that
-// logs with the *Context methods gets it attached without asking.
+// Loggers built here read the request ID and client address from the context,
+// so a handler that logs with the *Context methods gets them attached without
+// asking.
 package logger
 
 import (
@@ -34,8 +35,9 @@ func (f Format) String() string {
 // New returns a slog.Logger that writes JSON to stderr at info level unless
 // options say otherwise.
 //
-// The returned logger reads the request ID from the context, so records logged
-// with the *Context methods carry it without the caller passing it along.
+// The returned logger reads the request ID and client address from the
+// context, so records logged with the *Context methods carry them without the
+// caller passing them along.
 func New(options ...Option) *slog.Logger {
 	c := defaultConfig()
 

@@ -82,8 +82,9 @@ request is attributable without handlers passing anything around.
 `X-Forwarded-For` as easily as a proxy can, so `clientip.New` reads the one
 header your proxy writes (`X-Forwarded-For`, `X-Real-IP` or RFC 7239
 `Forwarded`), and only on requests that arrive from an address you list as
-trusted. The request logger records the address it resolves, and never reads
-the headers itself.
+trusted. Loggers from `logger.New` add the address it resolves to every line
+as `client_ip`, and the request logger records it too, never reading the
+headers itself.
 
 **Shutdown actually drains.** Cancelling the context passed to `Serve` stops the
 server accepting connections and waits for in-flight requests. `Serve` returns
