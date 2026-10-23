@@ -144,8 +144,10 @@ type delta struct {
 }
 
 // Stream reads a response of server-sent events, as LLM APIs stream their
-// output, yielding each event as it arrives. The client's timeout does not
-// cut a long stream off; bound it with the context instead.
+// output, yielding each event as it arrives. This upstream ends its stream
+// with a [DONE] event, as OpenAI-style APIs do, so WithStreamEnd names it.
+// The client's timeout does not cut a long stream off; bound it with the
+// context instead.
 func Example_stream() {
 	upstream := newUpstream()
 	defer upstream.Close()
@@ -155,7 +157,7 @@ func Example_stream() {
 		log.Fatal(err)
 	}
 
-	for ev, err := range c.Stream[delta](context.Background(), http.MethodPost, "/chat", newPost{Title: "hi"}) {
+	for ev, err := range c.Stream[delta](context.Background(), http.MethodPost, "/chat", newPost{Title: "hi"}, client.WithStreamEnd("[DONE]")) {
 		if err != nil {
 			log.Fatal(err)
 		}

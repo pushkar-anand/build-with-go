@@ -28,9 +28,6 @@ type Event[T any] struct {
 	Data T
 }
 
-// doneData is the data of the event that OpenAI-style APIs end a stream with.
-const doneData = "[DONE]"
-
 // Stream sends body to rawURL with the given method, and reads the response
 // as a stream of server-sent events, yielding each one as it arrives:
 //
@@ -46,15 +43,17 @@ const doneData = "[DONE]"
 // closed when the loop ends, early or not. A failure is yielded as the error,
 // and ends the loop: sending the request, a non-2xx status (a *StatusError), a
 // response that is not text/event-stream, reading the stream, or decoding an
-// event. When T is decoded from JSON, an event whose data is [DONE] ends the
-// stream, as OpenAI-style APIs send it last.
+// event. A stream ends when the upstream closes it, or at the event that
+// WithStreamEnd names.
 //
 // The client's timeout does not apply, since a stream lasts as long as the
 // upstream keeps sending. Bound it with ctx; WithResponseHeaderTimeout bounds
 // the wait for it to start.
 func (c *Client) Stream[T, Req any](ctx context.Context, method, rawURL string, body Req, opts ...RequestOption) iter.Seq2[Event[T], error] {
 	return func(yield func(Event[T], error) bool) {
-		resp, err := c.send(ctx, method, rawURL, body, opts, mediaTypeEventStream, true)
+		r := newRequestOptions(opts)
+
+		resp, err := c.send(ctx, method, rawURL, body, r, mediaTypeEventStream, true)
 		if err != nil {
 			yield(Event[T]{}, err)
 			return
@@ -69,15 +68,13 @@ func (c *Client) Stream[T, Req any](ctx context.Context, method, rawURL string, 
 			}
 		}
 
-		decodesJSON := wantsJSON[T]()
-
 		for raw, err := range readEvents(resp.Body) {
 			if err != nil {
 				yield(Event[T]{}, fmt.Errorf("client: read stream: %w", err))
 				return
 			}
 
-			if decodesJSON && raw.data == doneData {
+			if r.streamEnd != "" && raw.data == r.streamEnd {
 				return
 			}
 

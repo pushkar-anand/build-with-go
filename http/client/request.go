@@ -12,17 +12,9 @@ import (
 )
 
 // newRequest builds the http.Request described by the client's defaults and
-// opts, applied in that order so a request option overrides a default.
-func (c *Client) newRequest[Req any](ctx context.Context, method, rawURL string, body Req, opts []RequestOption) (*http.Request, error) {
-	r := &request{
-		header: make(http.Header),
-		query:  make(url.Values),
-	}
-
-	for _, opt := range opts {
-		opt.apply(r)
-	}
-
+// the call's options, applied in that order so a request option overrides a
+// default.
+func (c *Client) newRequest[Req any](ctx context.Context, method, rawURL string, body Req, r *request) (*http.Request, error) {
 	u, err := c.resolve(rawURL)
 	if err != nil {
 		return nil, err

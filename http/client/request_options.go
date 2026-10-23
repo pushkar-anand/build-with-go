@@ -17,11 +17,26 @@ type (
 
 	// request collects what the options of one call ask for.
 	request struct {
-		header http.Header
-		query  url.Values
-		edits  []func(*http.Request) error
+		header    http.Header
+		query     url.Values
+		edits     []func(*http.Request) error
+		streamEnd string
 	}
 )
+
+// newRequestOptions collects what opts ask for.
+func newRequestOptions(opts []RequestOption) *request {
+	r := &request{
+		header: make(http.Header),
+		query:  make(url.Values),
+	}
+
+	for _, opt := range opts {
+		opt.apply(r)
+	}
+
+	return r
+}
 
 func (fn requestOptionFunc) apply(r *request) {
 	fn(r)
@@ -75,5 +90,16 @@ func WithBasicAuth(username string, password secret.Secret[string]) RequestOptio
 func WithRequestFunc(fn func(*http.Request) error) RequestOption {
 	return requestOptionFunc(func(r *request) {
 		r.edits = append(r.edits, fn)
+	})
+}
+
+// WithStreamEnd ends a Stream at the first event whose data is data, without
+// yielding that event. Use it for an API that marks the end of its stream
+// with a sentinel rather than by closing it, as OpenAI-style APIs send
+// "[DONE]", which would otherwise fail to decode. Calls other than Stream
+// ignore it.
+func WithStreamEnd(data string) RequestOption {
+	return requestOptionFunc(func(r *request) {
+		r.streamEnd = data
 	})
 }
