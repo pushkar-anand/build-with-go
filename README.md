@@ -98,6 +98,7 @@ only once that has finished, so exiting when it returns is safe.
 | [`logger`](logger) | slog loggers, and HTTP request logging middleware |
 | [`validator`](validator) | struct-tag validation with per-field reasons |
 | [`ctxval`](ctxval) | request-scoped context values |
+| [`secret`](secret) | values that print, log, and encode as `[redacted]` |
 | [`http/server`](http/server) | `http.Server` with context-driven graceful shutdown |
 | [`http/middleware`](http/middleware) | request ID middleware |
 | [`http/clientip`](http/clientip) | the client's address, read through trusted proxies |
