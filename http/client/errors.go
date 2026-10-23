@@ -2,12 +2,18 @@ package client
 
 import (
 	json "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"net/url"
 )
+
+// ErrResponseHeaderTimeout is returned when a call that hands the body over
+// waits longer than the response header timeout for its response to start.
+// See WithResponseHeaderTimeout.
+var ErrResponseHeaderTimeout = errors.New("client: timed out waiting for response headers")
 
 type (
 	// StatusError is returned for a response outside the 2xx range.

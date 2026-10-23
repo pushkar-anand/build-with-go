@@ -11,6 +11,7 @@ const (
 
 // Media types the client sends and recognises.
 const (
+	mediaTypeEventStream = "text/event-stream"
 	mediaTypeForm        = "application/x-www-form-urlencoded"
 	mediaTypeJSON        = "application/json"
 	mediaTypeOctetStream = "application/octet-stream"
