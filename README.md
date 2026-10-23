@@ -104,6 +104,8 @@ only once that has finished, so exiting when it returns is safe.
 | [`http/clientip`](http/clientip) | the client's address, read through trusted proxies |
 | [`http/request`](http/request) | decode and validate JSON, form, and query data |
 | [`http/response`](http/response) | JSON responses and RFC 9457 problem documents |
+| [`http/client`](http/client) | typed outbound calls, with non-2xx responses as errors |
+| [`http/transport`](http/transport) | bearer-token and debugging RoundTrippers |
 
 ### config
 
@@ -184,6 +186,32 @@ a response.
 
 `Listen()` binds without serving, so `Addr()` reports the assigned port — bind
 to port 0 in tests and skip the race of reserving one.
+
+### http/client
+
+Every call names the type it wants back; the request body's type is inferred.
+Relative URLs are appended to the base URL's path, so `/posts` below reaches
+`/v1/posts`.
+
+```go
+c, err := client.New(
+    client.WithBaseURL("https://api.example.com/v1"),
+    client.WithTokenSource(transport.StaticToken(token)),
+)
+
+post, err := c.Get[Post](ctx, "/posts/1")
+created, err := c.Post[Post](ctx, "/posts", NewPost{Title: "Hello"})
+```
+
+Bodies go by type both ways: `[]byte` and `string` as they are, `url.Values`
+as a form, an `io.Reader` streamed, anything else as JSON. Ask for `struct{}`
+to discard a response body, or `*http.Response` to read it yourself.
+
+Any status outside 2xx is returned as a `*client.StatusError`, carrying the
+start of the body, and the decoded problem document when the upstream sends
+one. `WithForwardRequestID` sends the request ID in the context as
+`X-Request-Id`. Tracing, metrics and retries go in the transport, via
+`WithTransport`; `WithDebug` dumps every request and response.
 
 ## Status
 
