@@ -207,11 +207,28 @@ Bodies go by type both ways: `[]byte` and `string` as they are, `url.Values`
 as a form, an `io.Reader` streamed, anything else as JSON. Ask for `struct{}`
 to discard a response body, or `*http.Response` to read it yourself.
 
+`Stream` reads server-sent events, as LLM APIs stream their output, yielding
+each one decoded as it arrives:
+
+```go
+for ev, err := range c.Stream[Delta](ctx, http.MethodPost, "/chat", req) {
+    if err != nil {
+        return err
+    }
+    fmt.Print(ev.Data.Text)
+}
+```
+
+The client's timeout covers calls whose body it reads. A stream, or a
+`*http.Response` handed over, runs as long as you keep reading: bound it with
+the context, and `WithResponseHeaderTimeout` bounds the wait for it to start.
+
 Any status outside 2xx is returned as a `*client.StatusError`, carrying the
 start of the body, and the decoded problem document when the upstream sends
 one. `WithForwardRequestID` sends the request ID in the context as
 `X-Request-Id`. Tracing, metrics and retries go in the transport, via
-`WithTransport`; `WithDebug` dumps every request and response.
+`WithTransport`; `WithDebug` dumps every request and response, bodies as they
+are read, so a stream shows up as it arrives.
 
 ## Status
 

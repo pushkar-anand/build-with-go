@@ -10,7 +10,13 @@
 // url.Values is sent as a form, an io.Reader is streamed, and anything else is
 // JSON. Asking for struct{} discards the response body, and asking for
 // *http.Response hands over the response unread, for streaming or for its
-// headers; the caller must then close its body.
+// headers; the caller must then close its body. Stream reads a response of
+// server-sent events, as LLM APIs send, yielding each event as it arrives.
+//
+// The client's timeout bounds a call whose body the client reads. A call that
+// hands the body over, as *http.Response or through Stream, runs as long as
+// the caller keeps reading: it is bounded by its context, and by the response
+// header timeout until the response starts.
 //
 // A response outside the 2xx range comes back as a *StatusError, so a caller
 // that checks err has handled every failure. When the upstream sends an
@@ -41,6 +47,11 @@ type Client struct {
 	forwardRequestID bool
 	maxErrBodySize   int64
 
+	// streamClient is httpClient without its overall timeout, for calls whose
+	// body the caller reads; headerTimeout bounds the wait for their headers.
+	streamClient  *http.Client
+	headerTimeout time.Duration
+
 	// Collected by options and applied to httpClient once they have all run,
 	// so the result does not depend on their order.
 	transport   http.RoundTripper
@@ -58,6 +69,7 @@ func New(opts ...Option) (*Client, error) {
 	c := &Client{
 		header:         make(http.Header),
 		maxErrBodySize: defaultMaxErrorBodySize,
+		headerTimeout:  defaultResponseHeaderTimeout,
 	}
 
 	for _, opt := range opts {
@@ -95,6 +107,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	c.httpClient = hc
+
+	c.streamClient = new(*hc)
+	c.streamClient.Timeout = 0
 
 	return c, nil
 }

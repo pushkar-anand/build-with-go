@@ -45,7 +45,8 @@ func WithBaseURL(rawURL string) Option {
 
 // WithHTTPClient sends requests through a copy of hc, so its transport,
 // redirect policy and cookie jar apply. It is copied, never modified, and its
-// timeout is kept as it is, even when that is none.
+// timeout is kept as it is, even when that is none. As with WithTimeout, that
+// timeout does not apply to a call that hands the body over.
 func WithHTTPClient(hc *http.Client) Option {
 	return optionFunc(func(c *Client) {
 		c.httpClient = hc
@@ -62,9 +63,23 @@ func WithTransport(rt http.RoundTripper) Option {
 
 // WithTimeout caps the time a request may take, including reading the
 // response body. It defaults to 30 seconds; pass 0 to disable it.
+//
+// It does not apply to a call that hands the body over, as *http.Response or
+// through Stream, since that body is read at the caller's pace. Bound those
+// with a context deadline, and WithResponseHeaderTimeout.
 func WithTimeout(d time.Duration) Option {
 	return optionFunc(func(c *Client) {
 		c.timeout = new(d)
+	})
+}
+
+// WithResponseHeaderTimeout caps how long a call that hands the body over, as
+// *http.Response or through Stream, waits for its response to start. Once the
+// headers arrive, the body may take as long as it takes. It defaults to 30
+// seconds; pass 0 to disable it.
+func WithResponseHeaderTimeout(d time.Duration) Option {
+	return optionFunc(func(c *Client) {
+		c.headerTimeout = d
 	})
 }
 

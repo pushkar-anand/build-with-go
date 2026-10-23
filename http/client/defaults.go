@@ -7,6 +7,15 @@ import "time"
 // needs longer can set a deadline on its context, or the client WithTimeout.
 const defaultTimeout = 30 * time.Second
 
+// How long a streamed call waits for its response to start. A stream can run
+// for minutes once started, but an upstream that has not answered in this
+// time is not going to.
+const defaultResponseHeaderTimeout = 30 * time.Second
+
+// The longest line of a server-sent event stream read. An LLM can put a large
+// tool call in one event, but a line without end is not an event.
+const maxEventLineSize = 1 << 20
+
 // The most of an error response body kept on a StatusError. Error bodies are
 // for diagnosis, and an upstream can send an arbitrarily large one.
 const defaultMaxErrorBodySize = 64 << 10

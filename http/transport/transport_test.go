@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,6 +152,83 @@ func TestDebug(t *testing.T) {
 	assert.NotContains(t, dump, "cookie-value")
 }
 
+// It runs in a synctest bubble: were the body buffered for the dump, the
+// round trip would wait on the upstream, which waits on the release below,
+// and synctest would report the deadlock.
+func TestDebug_streams(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		pr, pw := io.Pipe()
+
+		go func() {
+			_, _ = io.WriteString(pw, "first")
+
+			<-release
+
+			_, _ = io.WriteString(pw, "second")
+			_ = pw.Close()
+		}()
+
+		var out bytes.Buffer
+		rt := &Debug{
+			Out: &out,
+			Next: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, ProtoMajor: 1, ProtoMinor: 1, Body: pr, ContentLength: -1, Request: req}, nil
+			}),
+		}
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example.com/", nil)
+
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+
+		buf := make([]byte, len("first"))
+		_, err = io.ReadFull(resp.Body, buf)
+		require.NoError(t, err)
+
+		assert.Equal(t, "first", string(buf))
+		assert.True(t, strings.HasSuffix(out.String(), "\r\n\r\nfirst"), "the dump lags the body: %q", out.String())
+
+		close(release)
+
+		_, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		assert.True(t, strings.HasSuffix(out.String(), "firstsecond\n\n"), "got %q", out.String())
+	})
+}
+
+func TestDebug_endsDumpOnClose(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	rt := &Debug{
+		Out: &out,
+		Next: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Body:       io.NopCloser(strings.NewReader("unread")),
+				Request:    req,
+			}, nil
+		}),
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example.com/", nil)
+
+	resp, err := rt.RoundTrip(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
+
+	assert.True(t, strings.HasSuffix(out.String(), "\r\n\r\n\n\n"), "got %q", out.String())
+	assert.NotContains(t, out.String(), "unread")
+}
+
 func TestDebug_error(t *testing.T) {
 	t.Parallel()
 
@@ -176,6 +254,6 @@ func TestRedactHeaders(t *testing.T) {
 
 	assert.Equal(t,
 		"GET / HTTP/1.1\r\nHost: example.com\r\nX-Api-Key: [redacted]\r\n\r\nAuthorization: in the body",
-		string(redactHeaders([]byte(dump))),
+		string(redactHeaders([]byte(dump), nil)),
 	)
 }

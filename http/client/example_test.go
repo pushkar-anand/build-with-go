@@ -50,6 +50,17 @@ func newUpstream() *httptest.Server {
 		_ = json.MarshalWrite(w, post{ID: 2, Title: in.Title})
 	})
 
+	mux.HandleFunc("POST /v1/chat", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+
+		for _, word := range []string{"Hello", ", ", "world"} {
+			_, _ = fmt.Fprintf(w, "event: delta\ndata: {\"text\":%q}\n\n", word)
+			w.(http.Flusher).Flush()
+		}
+
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	})
+
 	return httptest.NewServer(mux)
 }
 
@@ -126,6 +137,36 @@ func Example_rawBody() {
 
 	// Output:
 	// {"id":1,"title":"Hello"}
+}
+
+type delta struct {
+	Text string `json:"text"`
+}
+
+// Stream reads a response of server-sent events, as LLM APIs stream their
+// output, yielding each event as it arrives. The client's timeout does not
+// cut a long stream off; bound it with the context instead.
+func Example_stream() {
+	upstream := newUpstream()
+	defer upstream.Close()
+
+	c, err := client.New(client.WithBaseURL(upstream.URL + "/v1"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for ev, err := range c.Stream[delta](context.Background(), http.MethodPost, "/chat", newPost{Title: "hi"}) {
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Print(ev.Data.Text)
+	}
+
+	fmt.Println()
+
+	// Output:
+	// Hello, world
 }
 
 // WithDebug dumps each request and response, with credentials redacted.
