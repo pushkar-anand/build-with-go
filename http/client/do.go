@@ -26,7 +26,7 @@ func (c *Client) Do[Resp, Req any](ctx context.Context, method, rawURL string, b
 	// body at its own pace, and closes it. Every other path closes it here.
 	p, handOver := any(&zero).(**http.Response)
 
-	resp, err := c.send(ctx, method, rawURL, body, opts, accept, handOver)
+	resp, err := c.send(ctx, method, rawURL, body, newRequestOptions(opts), accept, handOver)
 	if err != nil {
 		return zero, err
 	}
@@ -48,8 +48,8 @@ func (c *Client) Do[Resp, Req any](ctx context.Context, method, rawURL string, b
 // sent without the client's timeout, which would cut a long body off, and is
 // bounded instead by ctx, and by the response header timeout until the
 // response arrives.
-func (c *Client) send[Req any](ctx context.Context, method, rawURL string, body Req, opts []RequestOption, accept string, streamed bool) (*http.Response, error) {
-	req, err := c.newRequest(ctx, method, rawURL, body, opts)
+func (c *Client) send[Req any](ctx context.Context, method, rawURL string, body Req, r *request, accept string, streamed bool) (*http.Response, error) {
+	req, err := c.newRequest(ctx, method, rawURL, body, r)
 	if err != nil {
 		return nil, err
 	}

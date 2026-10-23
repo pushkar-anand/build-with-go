@@ -138,7 +138,7 @@ type delta struct {
 func TestClient_Stream(t *testing.T) {
 	t.Parallel()
 
-	t.Run("yields each event, decoded, until [DONE]", func(t *testing.T) {
+	t.Run("yields each event, decoded, until the end WithStreamEnd names", func(t *testing.T) {
 		t.Parallel()
 
 		var gotAccept, gotBody string
@@ -159,7 +159,7 @@ func TestClient_Stream(t *testing.T) {
 
 		var got []Event[delta]
 
-		for ev, err := range c.Stream[delta](t.Context(), http.MethodPost, "/chat", map[string]string{"prompt": "hi"}) {
+		for ev, err := range c.Stream[delta](t.Context(), http.MethodPost, "/chat", map[string]string{"prompt": "hi"}, WithStreamEnd("[DONE]")) {
 			require.NoError(t, err)
 
 			got = append(got, ev)
@@ -173,7 +173,7 @@ func TestClient_Stream(t *testing.T) {
 		}, got)
 	})
 
-	t.Run("keeps data as sent when asked for a string", func(t *testing.T) {
+	t.Run("keeps data as sent when asked for a string, [DONE] and all", func(t *testing.T) {
 		t.Parallel()
 
 		srv := newEventServer(t, func(event func(string)) {
